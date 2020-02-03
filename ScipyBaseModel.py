@@ -9,25 +9,47 @@ from sqlalchemy import create_engine
 pd.plotting.register_matplotlib_converters()
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
+    # Energy difference between load and generation is handled by TES
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
-def model(gen, time, load):
-    mass_salt = 6e6 # kg of salt for thermal energy storage
+def model(gen, time, load, verbose=False):
+    mass_salt = 6e8 # kg of salt for thermal energy storage
     cost_nuclear = 0.021 # $/KWh
     cost_salt = 10.98    # $/kg
-    T0 = 350 #K
+    cost_blackout = 1e20
+    cost_oversupply = 1e20
+    T_next = 350 #K
     Cp = 1530 # J/kg K, heat capacity of the salt
-    dt = 3600 # seconds/hr
     T_hist = []
+    tes_min_t = 300
+    tes_max_t = 700
+
+    cost_total = cost_salt*mass_salt
 
     for i in range(len(time)):
-        step = odeint(thermal_storage, T0, [0, 1], 
+        step = odeint(thermal_storage, T_next, [0, 1], 
                 args=(gen[i], load[i], mass_salt, Cp))
-        print(step)
-        T_hist.append(step[1])
-        T0 = step[1]
+        T_next = step[1]
+        if T_next < tes_min_t:
+            if verbose:
+                print('Warning: TES too cold.')
+            T_next = tes_min_t 
+            cost_total += cost_blackout
 
-    return cost_salt*mass_salt + np.sum(gen*cost_nuclear)
+        if T_next > tes_max_t:
+            if verbose:
+                print('Warning: TES too hot.')
+            T_next = tes_max_t
+            cost_total += cost_oversupply
+            
+        T_hist.append(T_next)
+
+    cost_total += np.sum(gen*cost_nuclear)
+
+    return cost_total, T_hist
+
+def obj(gen, time, load):
+    return model(gen, time, load)[0]
 
 
 if __name__ == "__main__":
@@ -45,13 +67,21 @@ if __name__ == "__main__":
 
     nuclear_capacity = 54000
 
-    cost = model(np.ones(len(time))*nuclear_capacity, time, load)
-    print('Cost', cost)
+    sol = minimize(obj, np.ones(len(time))*nuclear_capacity, args=(time, load))
+    print('Success:', sol['success'])
+    print('x: ', sol['x'])
 
-    # sol = minimize(model, np.ones(len(time))*nuclear_capacity, args=(time, load))
-    # print(sol)
+    cost, T_hist = model(sol['x'], time, load, verbose=True)
+    print(cost)
 
-    # plt.plot(time, load, label='Load')
-    # # plt.plot(time, sol['x']*1200, label='Nuclear')
-    # plt.legend()
-    # plt.show()
+    plt.subplot(211)
+    plt.plot(time, load, label='Load')
+    plt.plot(time, sol['x'], label='Nuclear')
+    plt.ylabel('Energy (MW)')
+    plt.legend()
+    plt.subplot(212)
+    plt.plot(time, T_hist, label='Thermal Energy Storage')
+    plt.ylabel('Temperature (K)')
+    plt.xlabel('Time')
+    plt.legend()
+    plt.show()
