@@ -97,7 +97,7 @@ def model(gen, time, load, verbose=False):
             cost_total += cost_oversupply*(T_next-tes_max_t)
             T_next = tes_max_t
 
-        T_hist.append(T_next[0])
+        T_hist.append(T_next)
 
     cost_total += np.sum(gen*cost_nuclear)
 

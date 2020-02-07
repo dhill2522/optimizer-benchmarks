@@ -10,11 +10,58 @@ pd.plotting.register_matplotlib_converters()
 
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
+    '''Determines how much heat will be stored/removed 
+    by the salt in the reactor.  Meant to be integrated 
+    using scipy.integrate.odeint.
+    
+    Params:
+    -------
+    t : 1D array
+        time array
+    T : 1D array
+        Difference in temperature
+    x : 1D array
+        Energy generation
+    load : 1D array
+        Energy demand
+    mass_salt : int
+        Amount of salt available to the reactor
+    Cp : int
+        Heat capacity of salt
+        
+    Returns:
+    --------
+    ODE : 1D array
+        Difference between generation and demand
+    '''
+
     # Energy difference between load and generation is handled by TES
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
 
 def model(gen, time, load, verbose=False):
+    '''Models the total cost of the system based on energy demand (load?), 
+    a time interval, and how much energy is generated.
+    
+    Params:
+    --------
+    gen : 1D array
+        represents energy to generate at each point in time
+    time : 1D array
+        time intervals
+    load : 1D array
+        energy demand at each point in time
+    verbose : bool
+        prints warning messages
+    
+    Returns:
+    ---------
+    cost_total : int
+        total cost of running the system
+    T_hist : 2D array
+        Temperature of reactor at each point in time
+    
+    '''
     mass_salt = 6e8  # kg of salt for thermal energy storage
     cost_nuclear = 0.021  # $/KWh
     cost_salt = 10.98    # $/kg
@@ -29,13 +76,18 @@ def model(gen, time, load, verbose=False):
     cost_total = cost_salt*mass_salt
 
     for i in range(len(time)):
+        # Get next temperature by integrating difference between 
+        # generation and demand
+
         step = odeint(thermal_storage, T_next, [0, 1],
                       args=(gen[i], load[i], mass_salt, Cp))
         T_next = step[1]
+
+        # Constraints - consider constrained optimization?
         if T_next < tes_min_t:
             if verbose:
                 print('Warning: TES too cold.')
-            cost_total += cost_blackout*(tes_min_t-T_next)
+            cost_total += cost_blackout*(tes_min_t-T_next)      # FIXME cost_total becomes a list?
             T_next = tes_min_t
 
         if T_next > tes_max_t:
@@ -48,10 +100,11 @@ def model(gen, time, load, verbose=False):
 
     cost_total += np.sum(gen*cost_nuclear)
 
-    return cost_total, T_hist
+    return cost_total, T_hist                          # FIXME T_hist is 2D, not necessary?
 
 
 def obj(gen, time, load):
+    '''Wrapper to minimize cost only.'''
     return model(gen, time, load)[0]
 
 
@@ -70,6 +123,7 @@ if __name__ == "__main__":
 
     nuclear_capacity = 54000
 
+    # Optimize generation to minimize cost
     guess = np.ones(len(time))*nuclear_capacity*0.95
     sol = minimize(obj, guess, args=(time, load), method='Nelder-mead')
     print('Success:', sol['success'])
