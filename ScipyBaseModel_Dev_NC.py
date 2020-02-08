@@ -34,8 +34,8 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
     ODE : 1D array
         Difference between generation and demand
     '''
-
-    # Energy difference between load and generation is handled by TES
+    
+    # Energy difference between load and generation is handled by TES  
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
 
@@ -78,16 +78,17 @@ def model(gen, time, load, verbose=False):
     for i in range(len(time)):
         # Get next temperature by integrating difference between 
         # generation and demand
-
+    
         step = odeint(thermal_storage, T_next, [0, 1],
                       args=(gen[i], load[i], mass_salt, Cp))
         T_next = step[1]
-
+        #print(step)
+        
         # Constraints - consider constrained optimization?
         if T_next < tes_min_t:
             if verbose:
-                print('Warning: TES too cold.')
-            cost_total += cost_blackout*(tes_min_t-T_next)      # FIXME cost_total becomes a list?
+                print('Warning: TES too cold.')             # FIXME cost_total becomes a list
+            cost_total += cost_blackout*(tes_min_t-T_next)
             T_next = tes_min_t
 
         if T_next > tes_max_t:
@@ -100,53 +101,65 @@ def model(gen, time, load, verbose=False):
 
     cost_total += np.sum(gen*cost_nuclear)
 
-    return cost_total, T_hist                          # FIXME T_hist is 2D, not necessary?
+    return cost_total, T_hist             # FIXME T_hist is 2D, not necessary?
 
 
 def obj(gen, time, load):
     '''Wrapper to minimize cost only.'''
     return model(gen, time, load)[0]
 
+#%%
+#if __name__ == "__main__":
+# Create the connection to the database
+con = create_engine('sqlite:///data/ercot_data.db')
 
-if __name__ == "__main__":
-    # Create the connection to the database
-    con = create_engine('sqlite:///data/ercot_data.db')
+# Create the sql query
+query = "SELECT * FROM Load WHERE HourEnding BETWEEN date('2019-10-01') AND date('2019-10-02')"
 
-    # Create the sql query
-    query = "SELECT * FROM Load WHERE HourEnding BETWEEN date('2019-10-01') AND date('2019-10-02')"
+# Load the data from the database
+data = pd.read_sql(query, con, parse_dates=['HourEnding'])
 
-    # Load the data from the database
-    data = pd.read_sql(query, con, parse_dates=['HourEnding'])
+time = data['HourEnding']
+load = data['ERCOT']
 
-    time = data['HourEnding']
-    load = data['ERCOT']
+nuclear_capacity = 54000
 
-    nuclear_capacity = 54000
+percent_operation = 0.95
 
-    # Optimize generation to minimize cost
-    guess = np.ones(len(time))*nuclear_capacity*0.95
-    sol = minimize(obj, guess, args=(time, load), method='Nelder-mead')
-    print('Success:', sol['success'])
-    print('x: ', sol['x'])
-    print(sol)
+guess = np.ones(len(time))*nuclear_capacity*percent_operation #0.95
 
-    cost, T_hist = model(sol['x'], time, load, verbose=True)
-    print(f'Cost optimized: ${cost}')
+#%% Optimize
+# guess is generation - what amount of energy generated 
+# will have the lowest cost?
 
-    guess = np.ones(len(time))*nuclear_capacity*0.97
-    cost_compare, T_hist_compare = model(guess, time, load, verbose=True)
-    print(f'Cost comparison: ${cost_compare}')
 
-    plt.subplot(211)
-    plt.plot(time, load, label='Load')
-    plt.plot(time, sol['x'], label='Nuclear optimized')
-    plt.plot(time, guess, label='Nuclear Comparison')
-    plt.ylabel('Energy (MW)')
-    plt.legend()
-    plt.subplot(212)
-    plt.plot(time, T_hist, label='TES optimized')
-    plt.plot(time, T_hist_compare, label='TES Comparison')
-    plt.ylabel('Temperature (K)')
-    plt.xlabel('Time')
-    plt.legend()
-    plt.show()
+sol = minimize(obj, guess, args=(time, load), method='Nelder-mead')
+print('Success:', sol['success'])
+print('x: ', sol['x'])
+print(sol)
+
+cost, T_hist = model(sol['x'], time, load, verbose=True)
+print(f'Cost optimized: ${cost}')
+
+guess = np.ones(len(time))*nuclear_capacity*percent_operation #0.97
+cost_compare, T_hist_compare = model(guess, time, load, verbose=True)
+print(f'Cost comparison: ${cost_compare}')
+
+# Plot demand with optimized generation and 
+# static generation
+plt.subplot(211)
+plt.plot(time, load, label='Load')
+plt.plot(time, sol['x'], label='Nuclear optimized')
+plt.plot(time, guess, label='Nuclear Comparison')
+plt.ylabel('Energy (MW)')
+plt.legend()
+
+# Plot optimized temperature with 
+# temperature of static generation system
+plt.subplot(212)
+plt.plot(time, T_hist, label='TES optimized')
+plt.plot(time, T_hist_compare, label='TES Comparison')
+plt.ylabel('Temperature (K)')
+plt.xlabel('Time')
+plt.legend()
+plt.show()
