@@ -34,12 +34,12 @@ function [cost_total, T_hist] = model(gen, time, loads)
        T_next = T_new(3);
        if T_next < tes_min_t
            cost_total = cost_total + cost_blackout*(tes_min_t - T_next);
-           T_next     = tes_min_t;
+           %T_next     = tes_min_t;
        end
        
        if T_next > tes_max_t
            cost_total = cost_total + cost_oversupply*(T_next - tes_max_t);
-           T_next     = tes_max_t;
+           %T_next     = tes_max_t;
        end
 
        T_hist = [T_hist;T_next];
