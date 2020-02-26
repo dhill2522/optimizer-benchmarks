@@ -13,17 +13,18 @@ Aeq = [];
 beq = [];
 lb  = [];
 ub  = [];
-%nonlcon = @(gen)non_linear_constraints(gen,time,loads);
-nonlcon = [];
+nonlcon = @(gen)non_linear_constraints(gen,time,loads);
+%nonlcon = [];
 guess   = nuclear_capacity * percent_operation * ones(length(time),1);
 options = optimoptions('fmincon', ...
         'Algorithm', 'sqp', ...  % choose one of: 'interior-point', 'sqp', 'active-set', 'trust-region-reflective'
         'Display', 'iter-detailed', ...  % display more information
-        'MaxIterations', 500, ...  % maximum number of iterations
+        'MaxIterations', 30, ...  % maximum number of iterations
         'MaxFunctionEvaluations', 1e6, ...  % maximum number of function calls
         'StepTolerance',1e-16, ...
         'OptimalityTolerance', 1e-16, ...  % convergence tolerance on first order optimality'ConstraintTolerance', 1e-16, ...  % convergence tolerance on constraints
-        'FiniteDifferenceType', 'forward', ...  % if finite differencing, can also use central 'ScaleProblem', true, ...
+        'FiniteDifferenceType', 'forward', ...  % if finite differencing, can also use central 
+        'ScaleProblem', true, ...
         'Diagnostics', 'on'); % display diagnotic information
 [gen_opt, cost_opt, exitflag, ~] = fmincon(@(gen)obj(gen,time,loads),guess,A,b,Aeq,beq,lb,ub,nonlcon,options);
 
