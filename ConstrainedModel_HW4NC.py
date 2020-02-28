@@ -321,8 +321,116 @@ def main_con():
     ax2.legend()
 
     plt.show()
+
+def main_pyoptsparse():
+    global time, load
+    my_date = "2019-10-04"
+    
+    data = get_data(my_date)
+    
+    time = data['HourEnding']
+    load = data['ERCOT']
+    
+    nuclear_capacity = 54000
+    # Optimize generation to minimize cost
+    guess = np.ones(len(time))*nuclear_capacity*0.95
+    
+    TES_max_T = 700
+    TES_min_T = 300
+    
+    
+    #sol = minimize(obj_constrained, guess, args=(time, load), method='SLSQP', constraints=constraints)
+    def con_max_temp_pyopt(X):
+        
+        T = model_constrained(X, time, load)[1]
+        
+        return T
+    
+    def con_min_temp_pyopt(X):
+    
+        T = model_constrained(X, time, load)[1]
+        return T
+    
+    def con_max_ramp(X):
+        '''Max ramp up or down does not exceed 2000 MW/hr'''
+        dEdt = []
+        for i in range(len(X)-1):
+            dEdt.append(abs(X[i+1] - X[i]))
+        
+        return dEdt
+        
+    def objfunc(xdict):
+        global time, load
+        x = xdict['gen']
+        gen = x
+        
+        funcs = {}
+        funcs['obj'] = model_constrained(gen, time, load, verbose=False)[0]
+        funcs['minTemp'] = con_min_temp(gen)
+        funcs['maxTemp'] = con_max_temp(gen)
+        funcs['maxRamp'] = con_max_ramp(gen)
+        
+        fail=False
+        
+        return funcs, fail
+    
+    
+    optProb = pyoptsparse.Optimization('Uncon', objfunc)
+    
+    numvars = len(time)
+    
+    optProb.addVarGroup('gen', numvars, type='c', value=nuclear_capacity*0.95, scale=100000)
+    optProb.addObj('obj')
+    
+    optProb.addConGroup('maxTemp', nCon=numvars, lower=0, upper=700, scale=1e7) # we could write just one constraint with lower and upper bounds
+    optProb.addConGroup('minTemp', nCon=numvars, lower=0, upper=700, scale=1e7)
+    optProb.addConGroup('maxRamp', nCon=numvars-1, lower=0, upper=2000, scale=1e7)
+    
+    # It's interesting to see how the optimization changes when we use con_min_temp_pyopt() as the 
+    # constraint with bound (300, 700) instead of having the two scipy constraints
+    
+#    optslsqp = pyoptsparse.SLSQP()  #SLSQP performs very poorly with pyoptsparse
+    optsnopt = pyoptsparse.OPT('snopt')
+    
+#    solslsqp = optslsqp(optProb, sens='FD')
+    solsnopt = optsnopt(optProb, sens='FD')
+        
+    # call solsnopt.__dict__ to see attributes
+    # we are interested in fStar, xStar, userObjCalls, userSensCalls
+    
+    xopt = solsnopt.xStar['gen']
+    
+    print(solsnopt)
+    
+    cost, T_hist = model(xopt, time, load, verbose=True)
+    print(f'Cost optimized: ${cost}')
+    
+    guess = np.ones(len(time))*nuclear_capacity*0.97
+    cost_compare, T_hist_compare = model(guess, time, load, verbose=True)
+    print(f'Cost comparison: ${cost_compare}')
+    
+    fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(9,7))
+    ax1.set_title(my_date)
+    
+    # plt.subplot(211)
+    ax1.plot(time, load, label='Load')
+    ax1.plot(time, xopt, label='Nuclear optimized')
+    ax1.plot(time, guess, label='Nuclear Comparison')
+    ax1.set_ylabel('Energy (MW)')
+    ax1.legend()
+    # plt.subplot(212)
+    ax2.plot(time, T_hist, label='TES optimized')
+    ax2.plot(time, T_hist_compare, label='TES Comparison')
+    ax2.set_ylabel('Temperature (K)')
+    ax2.set_xlabel('Time')
+    ax2.legend()
+    
+    plt.show()
+
     
 if __name__ == "__main__":
-    main_con()
+    # main_con()
+    # main_uncon()
+    main_pyoptsparse()
 
     
