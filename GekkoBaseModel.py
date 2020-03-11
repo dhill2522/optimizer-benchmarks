@@ -40,7 +40,7 @@ m.Obj(total_cost)
 
 ######### Solve Model
 m.options.IMODE = 5
-m.options.SOLVER = 3
+m.options.SOLVER = 1
 m.solve()
 
 ######## Plot Model

@@ -102,6 +102,67 @@ def model(gen, time, load, verbose=False):
 
     return cost_total, T_hist                          # FIXME T_hist is 2D, not necessary?
 
+# ====== Model with constraints =======================================
+    
+def model_obj_only(gen):
+    '''Model objective without calculating temperatures.'''
+    cost_nuclear = 0.021  # $/KWh
+    
+    cost_total = np.sum(gen*cost_nuclear)
+    
+    return cost_total
+
+def get_T(gen, time, load):
+    '''General equation for getting the temperature list.'''
+    
+    mass_salt = 6e8  # kg of salt for thermal energy storage
+    Cp = 1530  # J/kg K, heat capacity of the salt
+    T_next = 350  # K
+    
+    T_hist = []
+    
+    for i in range(len(time)):
+        # Get next temperature by integrating difference between 
+        # generation and demand
+
+        step = odeint(thermal_storage, T_next, [0, 1],
+                      args=(gen[i], load[i], mass_salt, Cp))
+        T_next = step[1][0]
+
+        T_hist.append(T_next)
+        
+    return T_hist
+
+# Scipy wants constraints like this - other frameworks might let you use bounds
+def model_con_max_T(gen, time, load):
+
+    tes_max_t = 700
+    inequalities = []
+    
+    T_hist = get_T(gen, time, load)
+    
+    resolution = 1e-6       # optional   
+    for temp in T_hist:
+        inequalities.append(tes_max_t - temp - resolution)  # >= 0
+        
+    return inequalities
+
+def model_con_min_T(gen, time, load):
+    
+    tes_min_t = 300
+    inequalities = []
+    
+    T_hist = get_T(gen, time, load)
+    
+    resolution=1e-6       # optional
+    for temp in T_hist:
+        inequalities.append(temp - tes_min_t + resolution)
+        
+    return inequalities
+
+# ======================================================================        
+    
+
 
 def obj(gen, time, load):
     '''Wrapper to minimize cost only.'''
