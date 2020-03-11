@@ -108,37 +108,63 @@ def obj(gen, time, load):
     return model(gen, time, load)[0]
 
 
+def load_query(year: str, month: str):
+    return f'''
+        SELECT HourEnding, ERCOT as Load
+        FROM Load 
+        WHERE HourEnding > datetime("{year}-{month}-01") 
+            AND HourEnding < datetime("{year}-{month}-02 01:00:00")
+        '''
+
+def gen_query(fuelType: str, year: str, month: str):
+    return f'''
+        SELECT Generation, Date_Time 
+        FROM Generation 
+        WHERE Fuel = "{fuelType}" 
+            AND Date_Time > datetime("{year}-{month}-01") 
+            AND Date_Time < datetime("{year}-{month}-02") 
+            AND Resolution = "Hourly"
+        '''
+
+
 if __name__ == "__main__":
+    year = '2019'
+    month = '10'
+
     # Create the connection to the database
     con = create_engine('sqlite:///data/ercot_data.db')
 
-    # Create the sql query
-    query = "SELECT * FROM Load WHERE HourEnding BETWEEN date('2019-10-01') AND date('2019-10-02')"
 
     # Load the data from the database
-    data = pd.read_sql(query, con, parse_dates=['HourEnding'])
+    data = pd.read_sql(load_query(year, month), con, parse_dates=['HourEnding'])
+    data['Wind'] = pd.read_sql(gen_query('Wind', year, month), con, parse_dates=[
+                               'Date_Time'])['Generation']
+    data['Solar'] = pd.read_sql(gen_query('Solar', year, month), con, parse_dates=[
+                               'Date_Time'])['Generation']
 
     time = data['HourEnding']
-    load = data['ERCOT']
+    load = data['Load']
+    net_load = data['Load'] - data['Wind'] - data['Solar']
 
     nuclear_capacity = 54000
+    guess = np.ones(len(time))*nuclear_capacity*0.95
 
     # Optimize generation to minimize cost
-    guess = np.ones(len(time))*nuclear_capacity*0.95
-    sol = minimize(obj, guess, args=(time, load), method='Nelder-mead')
+    sol = minimize(obj, guess, args=(time, net_load), method='SLSQP')
     print('Success:', sol['success'])
     print('x: ', sol['x'])
     print(sol)
 
-    cost, T_hist = model(sol['x'], time, load, verbose=True)
+    cost, T_hist = model(sol['x'], time, net_load, verbose=True)
     print(f'Cost optimized: ${cost}')
 
     guess = np.ones(len(time))*nuclear_capacity*0.97
-    cost_compare, T_hist_compare = model(guess, time, load, verbose=True)
+    cost_compare, T_hist_compare = model(guess, time, net_load, verbose=True)
     print(f'Cost comparison: ${cost_compare}')
 
     plt.subplot(211)
     plt.plot(time, load, label='Load')
+    plt.plot(time, net_load, label='Net Load')
     plt.plot(time, sol['x'], label='Nuclear optimized')
     plt.plot(time, guess, label='Nuclear Comparison')
     plt.ylabel('Energy (MW)')
