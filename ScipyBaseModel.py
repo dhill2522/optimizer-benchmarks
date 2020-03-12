@@ -41,7 +41,8 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
 
 def model(gen, time, load, verbose=False):
     '''Models the total cost of the system based on energy demand (load?), 
-    a time interval, and how much energy is generated.
+    a time interval, and how much energy is generated. This is a penalty 
+    method and includes the constraints directly in the objective cost.
     
     Params:
     --------
@@ -62,9 +63,7 @@ def model(gen, time, load, verbose=False):
         Temperature of reactor at each point in time
     
     '''
-    mass_salt = 6e8  # kg of salt for thermal energy storage
     cost_nuclear = 0.021  # $/KWh
-    cost_salt = 10.98    # $/kg
     cost_blackout = 1e10
     cost_oversupply = 1e10
     T_next = 350  # K
@@ -73,21 +72,20 @@ def model(gen, time, load, verbose=False):
     tes_min_t = 300
     tes_max_t = 700
 
-    cost_total = cost_salt*mass_salt
+    cost_total = 0
 
     for i in range(len(time)):
         # Get next temperature by integrating difference between 
         # generation and demand
-
         step = odeint(thermal_storage, T_next, [0, 1],
                       args=(gen[i], load[i], mass_salt, Cp))
-        T_next = step[1]
+        T_next = step[1][0]
 
-        # Constraints - consider constrained optimization?
+        # Constraints using a penalty method
         if T_next < tes_min_t:
             if verbose:
                 print('Warning: TES too cold.')
-            cost_total += cost_blackout*(tes_min_t-T_next)      # FIXME cost_total becomes a list?
+            cost_total += cost_blackout*(tes_min_t-T_next)
             T_next = tes_min_t
 
         if T_next > tes_max_t:
@@ -97,13 +95,9 @@ def model(gen, time, load, verbose=False):
             T_next = tes_max_t
 
         T_hist.append(T_next)
-
     cost_total += np.sum(gen*cost_nuclear)
+    return cost_total, T_hist
 
-    return cost_total, T_hist                          # FIXME T_hist is 2D, not necessary?
-
-# ====== Model with constraints =======================================
-    
 def model_obj_only(gen):
     '''Model objective without calculating temperatures.'''
     cost_nuclear = 0.021  # $/KWh
@@ -160,14 +154,9 @@ def model_con_min_T(gen, time, load):
         
     return inequalities
 
-# ======================================================================        
-    
-
-
 def obj(gen, time, load):
     '''Wrapper to minimize cost only.'''
     return model(gen, time, load)[0]
-
 
 def load_query(year: str, month: str):
     return f'''
@@ -211,16 +200,27 @@ if __name__ == "__main__":
     guess = np.ones(len(time))*nuclear_capacity*0.95
 
     # Optimize generation to minimize cost
-    sol = minimize(obj, guess, args=(time, net_load), method='SLSQP')
-    print('Success:', sol['success'])
-    print('x: ', sol['x'])
+    cons = [
+        {
+            'type': 'ineq',
+            'fun': model_con_max_T,
+            'args': [time, net_load]
+        },
+        {
+            'type': 'ineq',
+            'fun': model_con_min_T,
+            'args': [time, net_load]
+        }
+    ]
+    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP')
     print(sol)
 
-    cost, T_hist = model(sol['x'], time, net_load, verbose=True)
+    cost = model_obj_only(sol['x'])
+    T_hist = get_T(sol['x'], time, net_load)
     print(f'Cost optimized: ${cost}')
 
-    guess = np.ones(len(time))*nuclear_capacity*0.97
-    cost_compare, T_hist_compare = model(guess, time, net_load, verbose=True)
+    cost_compare = model_obj_only(guess)
+    T_hist_compare = get_T(guess, time, net_load)
     print(f'Cost comparison: ${cost_compare}')
 
     plt.subplot(211)
