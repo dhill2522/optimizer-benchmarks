@@ -101,9 +101,13 @@ def model(gen, time, load, verbose=False):
 def model_obj_only(gen):
     '''Model objective without calculating temperatures.'''
     cost_nuclear = 0.021  # $/KWh
-    
+    cost_ramp = 1000
+
     cost_total = np.sum(gen*cost_nuclear)
-    
+
+    for i, val in enumerate(gen[:-1]):
+        cost_total += abs(val - gen[i+1])
+
     return cost_total
 
 def get_T(gen, time, load):
@@ -153,6 +157,16 @@ def model_con_min_T(gen, time, load):
         inequalities.append(temp - tes_min_t + resolution)
         
     return inequalities
+
+def model_con_max_ramp(gen):
+    'A constraint to ensure the reactor does not ramp too quickly'
+    cost_ramp = 10
+    max_ramp_rate = 100
+    inequalities = []
+    for i, val in enumerate(gen[:-1]):
+        inequalities.append(max_ramp_rate - abs(val - gen[i+1]))
+    return inequalities
+
 
 def obj(gen, time, load):
     '''Wrapper to minimize cost only.'''
@@ -210,6 +224,11 @@ if __name__ == "__main__":
             'type': 'ineq',
             'fun': model_con_min_T,
             'args': [time, net_load]
+        },
+        {
+            'type': 'ineq',
+            'fun': model_con_max_ramp,
+            'args': []
         }
     ]
     sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP')
