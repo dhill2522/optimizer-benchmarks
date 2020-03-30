@@ -8,6 +8,18 @@ from sqlalchemy import create_engine
 # Makes matplotlib happy plotting pandas data arrays
 pd.plotting.register_matplotlib_converters()
 
+config = {
+    'cost_nuclear': 0.021,      # $/KWh
+    'cost_blackout': 1e10,      # $, cost of not supplying sufficient power, for penalty method
+    'cost_oversupply': 1e10,    # $, cost of supplying too much power, for penalty method
+    'Cp': 1530,                 # J/kg K, heat capacity of the salt
+    'tes_min_t': 300,           # K, Minimum temperature of thermal storage unit
+    'tes_max_t': 700,           # K, Maximum temperature of thermal storage unit
+    'mass_salt': 6e8,           # kg, mass of salt for thermal energy storage
+    'nuclear_capacity': 54000,  # MW, Total amount of potential nuclear output
+    'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
+    'max_ramp_rate': 1000       # MW/hr, Max rate of ramping the reactor core
+}
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
     '''Determines how much heat will be stored/removed 
@@ -39,7 +51,7 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
 
-def model(gen, time, load, verbose=False):
+def model(gen, time, load, cfg, verbose=False):
     '''Models the total cost of the system based on energy demand (load?), 
     a time interval, and how much energy is generated. This is a penalty 
     method and includes the constraints directly in the objective cost.
@@ -52,6 +64,8 @@ def model(gen, time, load, verbose=False):
         time intervals
     load : 1D array
         energy demand at each point in time
+    cfg: dict
+        a dict of system paramters
     verbose : bool
         prints warning messages
     
@@ -63,22 +77,23 @@ def model(gen, time, load, verbose=False):
         Temperature of reactor at each point in time
     
     '''
-    cost_nuclear = 0.021  # $/KWh
-    cost_blackout = 1e10
-    cost_oversupply = 1e10
-    T_next = 350  # K
-    Cp = 1530  # J/kg K, heat capacity of the salt
-    T_hist = []
-    tes_min_t = 300
-    tes_max_t = 700
+    mass_salt = cfg['mass_salt']
+    Cp = cfg['Cp']
+    cost_blackout = cfg['cost_blackout']
+    cost_oversupply = cfg['cost_oversupply']
+    tes_min_t = cfg['tes_min_t']
+    tes_max_t = cfg['tes_max_t']
+    cost_nuclear = cfg['cost_nuclear']
 
+    T_next = 350  # K
+    T_hist = []
     cost_total = 0
 
     for i in range(len(time)):
         # Get next temperature by integrating difference between 
         # generation and demand
         step = odeint(thermal_storage, T_next, [0, 1],
-                      args=(gen[i], load[i], mass_salt, Cp))
+                      args=(gen[i], load[i], mass_salt, cfg['Cp']))
         T_next = step[1][0]
 
         # Constraints using a penalty method
@@ -98,23 +113,25 @@ def model(gen, time, load, verbose=False):
     cost_total += np.sum(gen*cost_nuclear)
     return cost_total, T_hist
 
-def model_obj_only(gen):
+def model_obj_only(gen, cfg):
     '''Model objective without calculating temperatures.'''
-    cost_nuclear = 0.021  # $/KWh
-    cost_ramp = 1000
+    cost_nuclear = cfg['cost_nuclear']
+    cost_ramp = cfg['cost_ramp']
 
+    # Include cost of power generation
     cost_total = np.sum(gen*cost_nuclear)
 
+    # Include cost of ramping the reactor
     for i, val in enumerate(gen[:-1]):
-        cost_total += abs(val - gen[i+1])
+        cost_total += cost_ramp*abs(val - gen[i+1])
 
     return cost_total
 
-def get_T(gen, time, load):
+def get_T(gen, time, load, cfg):
     '''General equation for getting the temperature list.'''
     
-    mass_salt = 6e8  # kg of salt for thermal energy storage
-    Cp = 1530  # J/kg K, heat capacity of the salt
+    mass_salt = cfg['mass_salt']  # kg of salt for thermal energy storage
+    Cp = cfg['Cp']  # J/kg K, heat capacity of the salt
     T_next = 350  # K
     
     T_hist = []
@@ -132,12 +149,12 @@ def get_T(gen, time, load):
     return T_hist
 
 # Scipy wants constraints like this - other frameworks might let you use bounds
-def model_con_max_T(gen, time, load):
+def model_con_max_T(gen, time, load, cfg):
 
     tes_max_t = 700
     inequalities = []
     
-    T_hist = get_T(gen, time, load)
+    T_hist = get_T(gen, time, load, cfg)
     
     resolution = 1e-6       # optional   
     for temp in T_hist:
@@ -145,12 +162,12 @@ def model_con_max_T(gen, time, load):
         
     return inequalities
 
-def model_con_min_T(gen, time, load):
+def model_con_min_T(gen, time, load, cfg):
     
     tes_min_t = 300
     inequalities = []
     
-    T_hist = get_T(gen, time, load)
+    T_hist = get_T(gen, time, load, cfg)
     
     resolution=1e-6       # optional
     for temp in T_hist:
@@ -158,19 +175,19 @@ def model_con_min_T(gen, time, load):
         
     return inequalities
 
-def model_con_max_ramp(gen):
+def model_con_max_ramp(gen, cfg):
     'A constraint to ensure the reactor does not ramp too quickly'
-    cost_ramp = 10
-    max_ramp_rate = 100
+    cost_ramp = cfg['cost_ramp']
+    max_ramp_rate = cfg['max_ramp_rate']
     inequalities = []
     for i, val in enumerate(gen[:-1]):
         inequalities.append(max_ramp_rate - abs(val - gen[i+1]))
     return inequalities
 
 
-def obj(gen, time, load):
+def obj(gen, time, load, cfg):
     '''Wrapper to minimize cost only.'''
-    return model(gen, time, load)[0]
+    return model(gen, time, load, cfg)[0]
 
 def load_query(year: str, month: str):
     return f'''
@@ -210,36 +227,36 @@ if __name__ == "__main__":
     load = data['Load']
     net_load = data['Load'] - data['Wind'] - data['Solar']
 
-    nuclear_capacity = 54000
-    guess = np.ones(len(time))*nuclear_capacity*0.95
+    guess = np.ones(len(time))*config['nuclear_capacity']*0.95
 
     # Optimize generation to minimize cost
     cons = [
         {
             'type': 'ineq',
             'fun': model_con_max_T,
-            'args': [time, net_load]
+            'args': [time, net_load, config]
         },
         {
             'type': 'ineq',
             'fun': model_con_min_T,
-            'args': [time, net_load]
+            'args': [time, net_load, config]
         },
         {
             'type': 'ineq',
             'fun': model_con_max_ramp,
-            'args': []
+            'args': [config]
         }
     ]
-    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP')
+    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, load, config))
+    # sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
     print(sol)
 
-    cost = model_obj_only(sol['x'])
-    T_hist = get_T(sol['x'], time, net_load)
-    print(f'Cost optimized: ${cost}')
+    cost = model_obj_only(sol['x'], config)
+    T_hist = get_T(sol['x'], time, net_load, config)
+    print(f'Cost optimized:  ${cost}')
 
-    cost_compare = model_obj_only(guess)
-    T_hist_compare = get_T(guess, time, net_load)
+    cost_compare = model_obj_only(guess, config)
+    T_hist_compare = get_T(guess, time, net_load, config)
     print(f'Cost comparison: ${cost_compare}')
 
     plt.subplot(211)
