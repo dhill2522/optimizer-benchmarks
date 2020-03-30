@@ -10,7 +10,7 @@ from ScipyBaseModel import config, model
 # Makes matplotlib happy plotting pandas data arrays
 pd.plotting.register_matplotlib_converters()
 
-time, net_load, load = utils.get_data(config['month'], config['year'])
+time, net_load = utils.get_data(config['month'], config['year'])
 
 def obj(input):
     objVal = model(input['xvars'], time, net_load, config)[0]
@@ -40,14 +40,14 @@ if __name__ == "__main__":
             solx[idx] = var.value
             idx += 1
 
-    cost, T_hist = model(solx, time, net_load, config, verbose=True)
+    cost, T_hist = model(solx, time, net_load, config)
     print(f'Cost optimized: ${cost}')
 
-    cost_compare, T_hist_compare = model(guess, time, net_load, config, verbose=True)
+    cost_compare, T_hist_compare = model(guess, time, net_load, config)
     print(f'Cost comparison: ${cost_compare}')
 
     plt.subplot(211)
-    plt.plot(time, load, label='Net Load')
+    plt.plot(time, net_load, label='Net Load')
     plt.plot(time, solx, label='Nuclear optimized')
     plt.plot(time, guess, label='Nuclear Comparison')
     plt.ylabel('Energy (MW)')

@@ -12,13 +12,14 @@ config = {
     'cost_nuclear': 0.021,      # $/KWh
     'cost_blackout': 1e10,      # $, cost of not supplying sufficient power, for penalty method
     'cost_oversupply': 1e10,    # $, cost of supplying too much power, for penalty method
+    'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
+    'cost_overramp': 1e10,      # $ per MW/hr overage, cost of ramping too quickly
+    'max_ramp_rate': 1000,      # MW/hr, Max rate of ramping the reactor core
     'Cp': 1530,                 # J/kg K, heat capacity of the salt
     'tes_min_t': 300,           # K, Minimum temperature of thermal storage unit
     'tes_max_t': 700,           # K, Maximum temperature of thermal storage unit
     'mass_salt': 6e8,           # kg, mass of salt for thermal energy storage
     'capacity': 54000,          # MW, Total amount of potential nuclear output
-    'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
-    'max_ramp_rate': 1000,      # MW/hr, Max rate of ramping the reactor core
     'year': '2019',             # Year being examined
     'month': '10'               # Month being examined
 }
@@ -52,7 +53,7 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
     # Energy difference between load and generation is handled by TES
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
-def model(gen, time, load, cfg, verbose=False):
+def model(gen, time, load, cfg):
     '''Models the total cost of the system based on energy demand (load?), 
     a time interval, and how much energy is generated. This is a penalty 
     method and includes the constraints directly in the objective cost.
@@ -67,8 +68,6 @@ def model(gen, time, load, cfg, verbose=False):
         energy demand at each point in time
     cfg : dict
         a dict of system paramters
-    verbose : bool
-        prints warning messages
     
     Returns:
     ---------
@@ -79,12 +78,12 @@ def model(gen, time, load, cfg, verbose=False):
     
     '''
     mass_salt = cfg['mass_salt']
-    Cp = cfg['Cp']
     cost_blackout = cfg['cost_blackout']
     cost_oversupply = cfg['cost_oversupply']
     tes_min_t = cfg['tes_min_t']
     tes_max_t = cfg['tes_max_t']
     cost_nuclear = cfg['cost_nuclear']
+    cost_ramp = cfg['cost_ramp']
 
     T_next = 350  # K
     T_hist = []
@@ -98,19 +97,22 @@ def model(gen, time, load, cfg, verbose=False):
         T_next = step[1][0]
 
         # Constraints using a penalty method
-        if T_next < tes_min_t:
-            if verbose:
-                print('Warning: TES too cold.')
+        if T_next < tes_min_t: # TES lower temp limit
             cost_total += cost_blackout*(tes_min_t-T_next)
             T_next = tes_min_t
 
-        if T_next > tes_max_t:
-            if verbose:
-                print('Warning: TES too hot.')
+        if T_next > tes_max_t: # TES upper temp limit
             cost_total += cost_oversupply*(T_next-tes_max_t)
             T_next = tes_max_t
 
+        if i > 0 and abs(gen[i] - gen[i-1]) > cfg['max_ramp_rate']: # ramp rate limit
+            cost_total += cfg['cost_overramp'] * (abs(gen[i] - gen[i-1]) - cfg['max_ramp_rate'])
+
         T_hist.append(T_next)
+
+    # Include cost of ramping the reactor
+    for i, val in enumerate(gen[:-1]):
+        cost_total += cost_ramp * abs(val - gen[i+1])
     cost_total += np.sum(gen*cost_nuclear)
     return cost_total, T_hist
 
@@ -192,7 +194,7 @@ def obj(gen, time, load, cfg):
 
 
 if __name__ == "__main__":
-    time, net_load, load = utils.get_data(config['month'], config['year'])
+    time, net_load = utils.get_data(config['month'], config['year'])
 
     guess = np.ones(len(time))*config['capacity']*0.95
 
@@ -214,20 +216,33 @@ if __name__ == "__main__":
             'args': [config]
         }
     ]
-    # sol = minimize(obj, guess, method='Nelder-Mead', args=(time, load, config))
-    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
+
+    opts = {'maxiter': 10000}
+
+    # Penalized Nelder-Mead method
+    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), options=opts)
+    cost_compare = obj(guess, time, net_load, config)
+    cost = obj(sol['x'], time, net_load, config)
+    
+    # Constrained SLSQP Method
+    # sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
+    # cost_compare = model_obj_only(guess, config)
+    # cost = model_obj_only(sol['x'], config)
+    
+    # Penalized SLSQP Method
+    # sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), options=opts)
+    # cost_compare = obj(guess, time, net_load, config)
+    # cost = obj(sol['x'], time, net_load, config)
+
     print(sol)
 
-    cost = model_obj_only(sol['x'], config)
     T_hist = get_T(sol['x'], time, net_load, config)
     print(f'Cost optimized:  ${cost}')
 
-    cost_compare = model_obj_only(guess, config)
     T_hist_compare = get_T(guess, time, net_load, config)
     print(f'Cost comparison: ${cost_compare}')
 
     plt.subplot(211)
-    plt.plot(time, load, label='Load')
     plt.plot(time, net_load, label='Net Load')
     plt.plot(time, sol['x'], label='Nuclear optimized')
     plt.plot(time, guess, label='Nuclear Comparison')

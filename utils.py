@@ -34,4 +34,4 @@ def get_data(month, year):
     time = data['HourEnding']
     load = data['Load']
     net_load = data['Load'] - data['Wind'] - data['Solar']
-    return time, net_load, load
+    return time, net_load
