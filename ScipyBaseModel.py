@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import utils
 from scipy.optimize import minimize
 from scipy.integrate import odeint
-from sqlalchemy import create_engine
 
 # Makes matplotlib happy plotting pandas data arrays
 pd.plotting.register_matplotlib_converters()
@@ -16,9 +16,11 @@ config = {
     'tes_min_t': 300,           # K, Minimum temperature of thermal storage unit
     'tes_max_t': 700,           # K, Maximum temperature of thermal storage unit
     'mass_salt': 6e8,           # kg, mass of salt for thermal energy storage
-    'nuclear_capacity': 54000,  # MW, Total amount of potential nuclear output
+    'capacity': 54000,          # MW, Total amount of potential nuclear output
     'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
-    'max_ramp_rate': 1000       # MW/hr, Max rate of ramping the reactor core
+    'max_ramp_rate': 1000,      # MW/hr, Max rate of ramping the reactor core
+    'year': '2019',             # Year being examined
+    'month': '10'               # Month being examined
 }
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
@@ -50,7 +52,6 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
     # Energy difference between load and generation is handled by TES
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
-
 def model(gen, time, load, cfg, verbose=False):
     '''Models the total cost of the system based on energy demand (load?), 
     a time interval, and how much energy is generated. This is a penalty 
@@ -64,7 +65,7 @@ def model(gen, time, load, cfg, verbose=False):
         time intervals
     load : 1D array
         energy demand at each point in time
-    cfg: dict
+    cfg : dict
         a dict of system paramters
     verbose : bool
         prints warning messages
@@ -189,45 +190,11 @@ def obj(gen, time, load, cfg):
     '''Wrapper to minimize cost only.'''
     return model(gen, time, load, cfg)[0]
 
-def load_query(year: str, month: str):
-    return f'''
-        SELECT HourEnding, ERCOT as Load
-        FROM Load 
-        WHERE HourEnding > datetime("{year}-{month}-01") 
-            AND HourEnding < datetime("{year}-{month}-02 01:00:00")
-        '''
-
-def gen_query(fuelType: str, year: str, month: str):
-    return f'''
-        SELECT Generation, Date_Time 
-        FROM Generation 
-        WHERE Fuel = "{fuelType}" 
-            AND Date_Time > datetime("{year}-{month}-01") 
-            AND Date_Time < datetime("{year}-{month}-02") 
-            AND Resolution = "Hourly"
-        '''
-
 
 if __name__ == "__main__":
-    year = '2019'
-    month = '10'
+    time, net_load, load = utils.get_data(config['month'], config['year'])
 
-    # Create the connection to the database
-    con = create_engine('sqlite:///data/ercot_data.db')
-
-
-    # Load the data from the database
-    data = pd.read_sql(load_query(year, month), con, parse_dates=['HourEnding'])
-    data['Wind'] = pd.read_sql(gen_query('Wind', year, month), con, parse_dates=[
-                               'Date_Time'])['Generation']
-    data['Solar'] = pd.read_sql(gen_query('Solar', year, month), con, parse_dates=[
-                               'Date_Time'])['Generation']
-
-    time = data['HourEnding']
-    load = data['Load']
-    net_load = data['Load'] - data['Wind'] - data['Solar']
-
-    guess = np.ones(len(time))*config['nuclear_capacity']*0.95
+    guess = np.ones(len(time))*config['capacity']*0.95
 
     # Optimize generation to minimize cost
     cons = [
@@ -247,8 +214,8 @@ if __name__ == "__main__":
             'args': [config]
         }
     ]
-    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, load, config))
-    # sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
+    # sol = minimize(obj, guess, method='Nelder-Mead', args=(time, load, config))
+    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
     print(sol)
 
     cost = model_obj_only(sol['x'], config)
