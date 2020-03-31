@@ -355,70 +355,10 @@ TES_max_T = 700
 TES_min_T = 300
 
 nuclear_capacity = 54000
-gen_factor = 0.85
+gen_factor = 0.95
 guess = np.ones(len(time))*nuclear_capacity*gen_factor
 
-
-m = ConcreteModel()
-npts = len(time)-1
-
-#m.t = ContinuousSet(initialize=time)
-#m.idx = RangeSet(0, npts-1)
-#m.l = Set(initialize=load)
-m.g = Set(initialize=range(len(time)))
-
-#m.Gen = Var(initialize=m.g)
-def load_rule(m, i):
-    return load[i]
-#m.Load = Param(m.idx, load_rule)
-
-def gen(m, i):
-    return guess[i]
-
-m.Gen = Var(m.g, bounds=(0, 1000000), initialize=gen)
-
-#m.s = Set(initialize=range(len(time)))
-
-def Trule(m, i):
-    return 500
-m.T = Param(m.g, initialize=Trule, mutable=True)
-#m.dTdt = DerivativeVar(m.T, wrt=m.t)
-
-#def thermal_rule(m, t):
-#    return m.dTdt[t] == 3.6e9*(m.Gen[t] - load[t])/(mass_salt*Cp)
-
-#m.thermal = Constraint(m.t, rule=thermal_rule)
-
-m.T_next = Param(initialize = 400, mutable=True)
-
-def thermal_rule(m, i):
-#for i in range(len(time)):
-    # Get next temperature by integrating difference between 
-    # generation and demand
-
-    step = odeint(thermal_storage, m.T_next.value, [0, 1],
-                  args=(m.Gen[i].value, load[i], mass_salt, Cp))
-    m.T_next = step[1][0]
-    m.T[i] = step[1][0]
-    
-    print(m.Gen[i].value)
-    return (TES_min_T, m.T[i], TES_max_T)
-
-m.thermal=Constraint(m.g, rule=thermal_rule)
-
-def objrule(m):
-    return summation(m.Gen)*cost_nuclear
-
-m.Cost = Objective(rule=objrule, sense=1)
-
-
-opt = SolverFactory('apopt.py')
-sol = opt.solve(m, tee='true')
-
-m.display()
-print(sol)
-
-#%%
+#%% Using odeint
 m = ConcreteModel()
 
 m.cost_nuclear = Param(initialize=cost_nuclear)
@@ -432,22 +372,134 @@ m.T0 = Param(initialize=350)
 
 def gen(m, i):
     return guess[int(i)]
-m.Gen = Var(m.t, bounds=(0, 1000000), initialize=gen)
+m.Gen = Var(m.t, bounds=(0, 1e10), initialize=gen)
 
 def load_rule(m, i):
-    return np.array(load)[i]
-m.Load = Param(m.g, initialize=load_rule)
+    return np.array(load)[int(i)]
+m.Load = Param(m.t, initialize=load_rule)
+
+def Trule(m, i):
+    return 500
+
+m.T_next = Param(initialize = 350, mutable=True)
+
+#def Trule(m, i):
+#    
+#    step = odeint(thermal_storage, m.T_next.value, [0, 1],
+#                  args=(m.Gen[i].value, load[i], mass_salt, Cp))
+#    
+#    m.T_next = step[1][0]
+#    m.T[i] = step[1][0]
+#    
+#    return m.T[i]
+
+m.T = Param(m.t, initialize=350, mutable=True)#Trule)
+
+
+def thermal_rule(m, i):
+#for i in range(len(time)):
+    # Get next temperature by integrating difference between 
+    # generation and demand
+
+#    step = odeint(thermal_storage, m.T_next.value, [0, 1],
+#                  args=(m.Gen[i].value, load[i], mass_salt, Cp))
+#    
+#    m.T_next = step[1][0]
+#    m.T[i] = step[1][0]
+    
+    T0 = m.T_next.value
+    T0 = m.T[i]
+    
+    T_new = 3.6e9*(m.Gen[i].value-load[i])/mass_salt/Cp + T0
+    print(T0, T_new)
+    
+    
+    gen_min = (TES_min_T-T0)*mass_salt*Cp/3.6e9 + load[i]
+    gen_max = (TES_max_T-T0)*mass_salt*Cp/3.6e9 + load[i]
+    
+    m.T_next = T_new
+    if i < len(m.T)-1:
+        m.T[i+1] = T_new
+    
+    print(gen_min)
+    
+    return (gen_min, m.Gen[i], gen_max)
+
+m.thermal=Constraint(m.t, rule=thermal_rule)
+
+def objrule(m):
+    return summation(m.Gen)*cost_nuclear
+
+m.Cost = Objective(rule=objrule, sense=1)
+
+
+opt = SolverFactory('apopt.py')
+sol = opt.solve(m, tee='true')
+
+m.display()
+print(sol)
+#%%
+xopt = list(m.Gen.extract_values().values())
+plt.plot(time, xopt)
+#plt.plot(time, load)
+#plt.plot(time, guess)
+#%%
+T_hist = []
+my_T = []
+my_min = []
+T_next=350
+xopt = guess
+for i in range(len(xopt)):
+    step = odeint(thermal_storage, T_next, [0, 1],
+                  args=(xopt[i], load[i], mass_salt, Cp))
+    my_T.append(3.6e9*(xopt[i] - load[i])/mass_salt/Cp + T_next)
+    my_min.append((TES_min_T-T_next)*mass_salt*Cp/3.6e9 + load[i])
+    T_next = step[1][0]
+    T_hist.append(T_next)
+    
+    
+
+T_hist, my_T, my_min
+
+#%% using pyomo.dae
+m = ConcreteModel()
+
+m.cost_nuclear = Param(initialize=cost_nuclear)
+m.mass_salt = Param(initialize=mass_salt)
+m.Cp = Param(initialize=Cp)
+
+m.g = Set(initialize=range(len(data["HourEnding"])))
+m.t = ContinuousSet(initialize=np.linspace(0, len(time)-1, len(time)))
+
+m.T0 = Param(initialize=350)
+
+def gen(m, i):
+    return guess[int(i)]
+m.Gen = Var(m.t, bounds=(0, 1e10), initialize=gen)
+m.Gen[0].fix(guess[0])
+
+def load_rule(m, i):
+    return np.array(load)[int(i)]
+m.Load = Param(m.t, initialize=load_rule)
 
 m.T = Var(m.t, initialize=m.T0, bounds=(TES_min_T, TES_max_T))
 m.dT = DerivativeVar(m.T, wrt=m.t)
 
 def thermal_rule(m, t):
-    return m.dT[t] == 3.6e9*(m.Gen[t] - m.Load[t])/(m.mass_salt*m.Cp)
+    if t == 0:
+        return Constraint.Skip
+    else:
+        return m.dT[t] == 3.6e9*(m.Gen[t] - m.Load[t])/(m.mass_salt*m.Cp)
 
 m.thermal = Constraint(m.t, rule=thermal_rule)
 
-discretizer = TransformationFactory('dae.collocation')
-discretizer.apply_to(m, nfe=len(time)-1, ncp=1)
+def thermal_con(m, i):
+    
+#sim = Simulator(m, package='scipy')
+#tsim, profiles = sim.simulate(numpoints=24)
+
+discretizer = TransformationFactory('dae.finite_difference')
+discretizer.apply_to(m, nfe=len(time)-1)
 
 def objrule(m):
     return summation(m.Gen)*m.cost_nuclear
@@ -465,6 +517,7 @@ print(sol)
 xopt = list(m.Gen.extract_values().values())
 plt.plot(time, xopt)
 plt.plot(time, load)
+plt.plot(time, guess)
 #%%
 T_hist = []
 T_next=350
@@ -475,18 +528,90 @@ for i in range(len(xopt)):
     T_hist.append(T_next)
 
 T_hist
-#%%
 
-model = ConcreteModel()
-model.s = Set(initialize=['a', 'b'])
-model.t = ContinuousSet(bounds=(0, 5))
-model.l = ContinuousSet(bounds=(-10, 10))
+dT = 3.6e9*(xopt[0]-load[0])/mass_salt/Cp + 350
 
-model.x = Var(model.s, model.t)
-model.y = Var(model.t, model.l)
-model.dxdt = DerivativeVar(model.x, wrt=model.t)
-model.dydt = DerivativeVar(model.y, wrt=model.t)
-model.dydl2 = DerivativeVar(model.y, wrt=(model.l, model.l))
+def dT_exact(Tmin, Tmax, i):
+    gen_min = Tmin*mass_salt*Cp/3.6e9 + load[i]
+    gen_max = Tmax*mass_salt*Cp/3.6e9 + load[i]
+    
+    return gen_min, gen_max
+
+dT_exact(300, 700, 1)
+
+#%% Just penalty model no constraints
+m = ConcreteModel()
+
+m.cost_nuclear = Param(initialize=cost_nuclear)
+m.mass_salt = Param(initialize=mass_salt)
+m.Cp = Param(initialize=Cp)
+m.T_next = Param(initialize=350, mutable=True)
+
+m.g = Set(initialize=range(len(data["HourEnding"])))
+
+def gen(m, i):
+    return guess[int(i)]
+m.Gen = Var(m.g, bounds=(0, 1e10), initialize=gen)
+
+def load_rule(m, i):
+    return np.array(load)[int(i)]
+m.Load = Param(m.g, initialize=load_rule)
+
+def objrule(m):
+    global T_hist
+    mass_salt = 6e8  # kg of salt for thermal energy storage
+    cost_nuclear = 0.021  # $/KWh
+    cost_salt = 10.98    # $/kg
+    cost_blackout = 1e10
+    cost_oversupply = 1e10
+    T_next = 350  # K
+    Cp = 1530  # J/kg K, heat capacity of the salt
+    T_hist = []
+    tes_min_t = 300
+    tes_max_t = 700
+
+    cost_total = 0
+    
+    for i in range(len(time)):
+        # Get next temperature by integrating difference between 
+        # generation and demand
+        genval = m.Gen[i].value
+        loadval = m.Load[i]
+        
+        T_next = m.T_next.value
+        step = odeint(thermal_storage, m.T_next.value, [0, 1],
+                      args=(genval, loadval, mass_salt, Cp))
+        T_next = step[1][0]
+
+        # Constraints - consider constrained optimization?
+        if T_next < tes_min_t:
+#            if verbose:
+#                print('Warning: TES too cold.')
+            cost_total += cost_blackout*(tes_min_t-T_next)
+            T_next = tes_min_t
+
+        if T_next > tes_max_t:
+#            if verbose:
+#                print('Warning: TES too hot.')
+#                print(T_next)
+            cost_total += cost_oversupply*(T_next-tes_max_t)
+            T_next = tes_max_t
+            
+        m.T_next = T_next
+        
+        T_hist.append(T_next)
+
+    cost_total += np.sum(m.Gen[i]*cost_nuclear)
+
+    return cost_total
+
+m.Cost = Objective(rule=objrule, sense=1)
+
+opt = SolverFactory('apopt.py')
+sol = opt.solve(m, tee='true')
+
+m.display()
+print(sol)
 
 #%%
 

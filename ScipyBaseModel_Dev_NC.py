@@ -1,4 +1,4 @@
-import numpy as np
+OPimport numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
@@ -41,7 +41,8 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
 
 def model(gen, time, load, verbose=False):
     '''Models the total cost of the system based on energy demand (load?), 
-    a time interval, and how much energy is generated.
+    a time interval, and how much energy is generated.  Most of the cost comes 
+    from the cost of the salt - currently 10.98*6e8.
     
     Params:
     --------
@@ -145,6 +146,7 @@ guess = np.ones(len(time))*nuclear_capacity*percent_operation #0.97
 cost_compare, T_hist_compare = model(guess, time, load, verbose=True)
 print(f'Cost comparison: ${cost_compare}')
 
+#%%
 # Plot demand with optimized generation and 
 # static generation
 plt.subplot(211)
@@ -163,3 +165,9 @@ plt.ylabel('Temperature (K)')
 plt.xlabel('Time')
 plt.legend()
 plt.show()
+
+#%% Pyomo BPOPT
+from __future__ import division
+from pyomo.environ import *
+
+m = ConcreteModel()
