@@ -14,7 +14,7 @@ config = {
     'cost_oversupply': 1e10,    # $, cost of supplying too much power, for penalty method
     'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
     'cost_overramp': 1e10,      # $ per MW/hr overage, cost of ramping too quickly
-    'max_ramp_rate': 1000,      # MW/hr, Max rate of ramping the reactor core
+    'max_ramp_rate': 2000,      # MW/hr, Max rate of ramping the reactor core
     'Cp': 1530,                 # J/kg K, heat capacity of the salt
     'tes_min_t': 300,           # K, Minimum temperature of thermal storage unit
     'tes_max_t': 700,           # K, Maximum temperature of thermal storage unit
