@@ -99,6 +99,6 @@ def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=
 
         update.to_csv(report_path, index=False)
 
-        print(update.to_string(index=False))
+        # print(update.to_string(index=False))
 
     
