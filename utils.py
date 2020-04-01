@@ -1,11 +1,10 @@
-from sqlalchemy import create_engine
+import datetime
+import matplotlib.pyplot as plt
 import pandas as pd
+from os.path import exists
+from sqlalchemy import create_engine
 
 from ScipyBaseModel import model, get_T, model_con_max_ramp
-from os.path import exists
-import datetime
-
-# import csv
 
 def load_query(year: str, month: str):
     return f'''
@@ -70,7 +69,7 @@ def results(xstar, config):
 
     return {'fstar':fstar, 'T':T, 'T_violations':T_violations, 'ramp_violations':ramp_violations}
 
-def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=None, gen_plot=False):
+def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=None, gen_plot=False, guess=None):
     '''Save info about a set of optimization results.
     Info for creating LaTex tables from a csv: 
         https://texblog.org/2012/05/30/generate-latex-tables-from-csv-files-excel/
@@ -118,4 +117,28 @@ def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=
 
         # print(update.to_string(index=False))
 
-    
+    if gen_plot:
+        time, net_load = get_data(config['month'], config['year'])
+        T_hist = get_T(xstar, time, net_load, config)
+        plt.subplot(211)
+        plt.plot(time.values, net_load, label='Net Load')
+        plt.plot(time.values, xstar, label='Nuclear optimized')
+        if guess is not None:
+            plt.plot(time.values, guess, label='Nuclear Initial')
+        plt.ylabel('Energy (MW)')
+        plt.legend(loc='upper left')
+        plt.subplot(212)
+        time_limits = [time.values[0], time.values[-1]]
+        plt.plot(time_limits, [config['tes_min_t'], config['tes_min_t']], 
+                    '--r', label='Temperature Constraints')
+        plt.plot(time_limits, [config['tes_max_t'], config['tes_max_t']], '--r')
+        plt.plot(time.values, T_hist, label='Optimized TES')
+        if guess is not None:
+            T_hist_compare = get_T(guess, time, net_load, config)
+            plt.plot(time.values, T_hist_compare, label='TES Initial')
+        plt.ylabel('Temperature (K)')
+        plt.xlabel('Time')
+        plt.legend(loc='upper left')
+        plt.gcf().autofmt_xdate()
+        plt.savefig(f'saved_plots/{optimizer}-{opt_type}-{date}.png')
+        plt.show()

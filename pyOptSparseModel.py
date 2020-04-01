@@ -5,25 +5,36 @@ import pyoptsparse
 from scipy.integrate import odeint
 
 import utils
-from ScipyBaseModel import config, model
+from ScipyBaseModel import config, model, model_obj_only, get_T
 
 # Makes matplotlib happy plotting pandas data arrays
-pd.plotting.register_matplotlib_converters()
+# pd.plotting.register_matplotlib_converters()
 
 time, net_load = utils.get_data(config['month'], config['year'])
 
 def obj(input):
     objVal = model(input['xvars'], time, net_load, config)[0]
-    print('objVal:', objVal)
+    return {'obj': objVal}
+
+def obj_constrained(input):
+    gen = input['xvars']
+    objVal = model_obj_only(gen, config)
+    T_hist = get_T(gen, time, net_load, config)
+    max_ramp = 0
+    for i, val in enumerate(gen[:-1]):
+        ramp = abs(val - gen[i+1])
+        if ramp > max_ramp:
+            max_ramp = ramp
     return {
-        'obj': objVal
+        'obj': objVal,
+        'max_ramp': max_ramp,
+        'max_T': max(T_hist),
+        'min_T': min(T_hist)
     }
 
-if __name__ == "__main__":
 
+def opt_penalty(guess):
     n = len(time)
-    guess = config['capacity']*np.ones(n)*0.95
-
     optProb = pyoptsparse.Optimization('NHES-internal-penalty', obj)
     optProb.addVarGroup('xvars', n, 'c', value=guess, 
                         lower=np.zeros(n), upper=np.ones(n)*config['capacity'])
@@ -31,31 +42,29 @@ if __name__ == "__main__":
     print('Problem', optProb)
     opt = pyoptsparse.OPT('snopt')
     sol = opt(optProb)
-    print('Solution', sol)
-    print('Stuff', type(sol))
-    solx = np.zeros(n)
-    idx = 0
-    for varname, val in sol.variables.items():
-        for var in val:
-            solx[idx] = var.value
-            idx += 1
+    return sol
 
-    cost, T_hist = model(solx, time, net_load, config)
-    print(f'Cost optimized: ${cost}')
+def opt_constrained(guess):
+    n = len(time)
 
-    cost_compare, T_hist_compare = model(guess, time, net_load, config)
-    print(f'Cost comparison: ${cost_compare}')
+    optProb = pyoptsparse.Optimization('NHES-constrained', obj_constrained)
+    optProb.addVarGroup('xvars', n, 'c', value=guess, 
+                        lower=np.zeros(n), upper=np.ones(n)*config['capacity'])
+    optProb.addCon('max_T', upper=config['tes_max_t'])
+    optProb.addCon('min_T', lower=config['tes_min_t'])
+    optProb.addCon('max_ramp', upper=config['max_ramp_rate'])
+    optProb.addObj('obj')
+    print('Problem', optProb)
+    opt = pyoptsparse.OPT('snopt')
+    sol = opt(optProb)
+    return sol
 
-    plt.subplot(211)
-    plt.plot(time, net_load, label='Net Load')
-    plt.plot(time, solx, label='Nuclear optimized')
-    plt.plot(time, guess, label='Nuclear Comparison')
-    plt.ylabel('Energy (MW)')
-    plt.legend()
-    plt.subplot(212)
-    plt.plot(time, T_hist, label='TES optimized')
-    plt.plot(time, T_hist_compare, label='TES Comparison')
-    plt.ylabel('Temperature (K)')
-    plt.xlabel('Time')
-    plt.legend()
-    plt.show()
+if __name__ == "__main__":
+    guess = config['capacity']*np.ones(len(time))*0.95
+    sol = opt_penalty(guess)
+    utils.gen_report([sol.xStar['xvars'], sol.userObjCalls], 'SNOPT', 
+                        'Penalized', config, gen_plot=True, guess=guess)
+    sol = opt_constrained(guess)
+    utils.gen_report([sol.xStar['xvars'], sol.userObjCalls], 'SNOPT', 
+                        'Constrained', config, gen_plot=True, guess=guess)
+    
