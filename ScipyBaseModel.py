@@ -221,37 +221,15 @@ if __name__ == "__main__":
 
     # Penalized Nelder-Mead method
     sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), options=opts)
-    cost_compare = obj(guess, time, net_load, config)
-    cost = obj(sol['x'], time, net_load, config)
+    utils.gen_report([sol['x'], sol['nfev']], 'Nelder-Mead', 'Penalized', 
+                        config, gen_plot=True, guess=guess)
     
     # Constrained SLSQP Method
-    # sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
-    # cost_compare = model_obj_only(guess, config)
-    # cost = model_obj_only(sol['x'], config)
+    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
+    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Constrained', 
+                        config, gen_plot=True, guess=guess)
     
     # Penalized SLSQP Method
-    # sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), options=opts)
-    # cost_compare = obj(guess, time, net_load, config)
-    # cost = obj(sol['x'], time, net_load, config)
-
-    print(sol)
-
-    T_hist = get_T(sol['x'], time, net_load, config)
-    print(f'Cost optimized:  ${cost}')
-
-    T_hist_compare = get_T(guess, time, net_load, config)
-    print(f'Cost comparison: ${cost_compare}')
-
-    plt.subplot(211)
-    plt.plot(time, net_load, label='Net Load')
-    plt.plot(time, sol['x'], label='Nuclear optimized')
-    plt.plot(time, guess, label='Nuclear Comparison')
-    plt.ylabel('Energy (MW)')
-    plt.legend()
-    plt.subplot(212)
-    plt.plot(time, T_hist, label='TES optimized')
-    plt.plot(time, T_hist_compare, label='TES Comparison')
-    plt.ylabel('Temperature (K)')
-    plt.xlabel('Time')
-    plt.legend()
-    plt.show()
+    sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), options=opts)
+    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Penalized', 
+                        config, gen_plot=True, guess=guess)

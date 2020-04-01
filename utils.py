@@ -83,7 +83,7 @@ def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=
     notes : str, additional notes about optimization
     filetype : str, only option right now is csv
     date : str, defaults to YYYY-MM-DD HH:MM:SS
-    gen_plot : bool, generate a figure of results, not implemented
+    gen_plot : bool, generate a figure of results
     '''
     # https://texblog.org/2012/05/30/generate-latex-tables-from-csv-files-excel/
     xstar = out[0]
