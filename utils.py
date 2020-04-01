@@ -43,6 +43,8 @@ def get_data(month, year):
     return time, net_load
 
 def results(xstar, config):
+    '''Generate results from the NHES optimization.'''
+
     time, net_load = get_data(config['month'], config['year'])
 
     # Get optimized cost
@@ -69,6 +71,21 @@ def results(xstar, config):
     return {'fstar':fstar, 'T':T, 'T_violations':T_violations, 'ramp_violations':ramp_violations}
 
 def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=None, gen_plot=False):
+    '''Save info about a set of optimization results.
+    Info for creating LaTex tables from a csv: 
+        https://texblog.org/2012/05/30/generate-latex-tables-from-csv-files-excel/
+
+    Inputs:
+    -------
+    out : array-like, two elements [xstar, fevals]
+    optimizer : str, name of optimizer used
+    opt_type : str, specify constrained/penalized
+    config : dict, parameters used in optimization
+    notes : str, additional notes about optimization
+    filetype : str, only option right now is csv
+    date : str, defaults to YYYY-MM-DD HH:MM:SS
+    gen_plot : bool, generate a figure of results, not implemented
+    '''
     # https://texblog.org/2012/05/30/generate-latex-tables-from-csv-files-excel/
     xstar = out[0]
     fevals = out[1]
