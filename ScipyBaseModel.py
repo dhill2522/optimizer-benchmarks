@@ -21,7 +21,8 @@ config = {
     'mass_salt': 6e8,           # kg, mass of salt for thermal energy storage
     'capacity': 54000,          # MW, Total amount of potential nuclear output
     'year': '2019',             # Year being examined
-    'month': '10'               # Month being examined
+    'month': '10',              # Month being examined
+    'guess_coef': 54000*0.95    # Initial guess (multiplied by an array of 1s)
 }
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
