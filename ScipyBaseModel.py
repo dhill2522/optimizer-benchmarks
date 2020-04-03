@@ -54,7 +54,7 @@ def thermal_storage(t, T, x, load, mass_salt, Cp):
     # Energy difference between load and generation is handled by TES
     return 3.6e9*(x - load)/(mass_salt*Cp)
 
-def model(gen, time, load, cfg):
+def model(gen, time, load, cfg=config):
     '''Models the total cost of the system based on energy demand (load?), 
     a time interval, and how much energy is generated. This is a penalty 
     method and includes the constraints directly in the objective cost.
@@ -117,7 +117,7 @@ def model(gen, time, load, cfg):
     cost_total += np.sum(gen*cost_nuclear)
     return cost_total, T_hist
 
-def model_obj_only(gen, cfg):
+def model_obj_only(gen, cfg=config):
     '''Model objective without calculating temperatures.'''
     cost_nuclear = cfg['cost_nuclear']
     cost_ramp = cfg['cost_ramp']
@@ -131,7 +131,7 @@ def model_obj_only(gen, cfg):
 
     return cost_total
 
-def get_T(gen, time, load, cfg):
+def get_T(gen, time, load, cfg=config):
     '''General equation for getting the temperature list.'''
     
     mass_salt = cfg['mass_salt']  # kg of salt for thermal energy storage
@@ -153,7 +153,7 @@ def get_T(gen, time, load, cfg):
     return T_hist
 
 # Scipy wants constraints like this - other frameworks might let you use bounds
-def model_con_max_T(gen, time, load, cfg):
+def model_con_max_T(gen, time, load, cfg=config):
 
     tes_max_t = 700
     inequalities = []
@@ -166,7 +166,7 @@ def model_con_max_T(gen, time, load, cfg):
         
     return inequalities
 
-def model_con_min_T(gen, time, load, cfg):
+def model_con_min_T(gen, time, load, cfg=config):
     
     tes_min_t = 300
     inequalities = []
@@ -179,9 +179,9 @@ def model_con_min_T(gen, time, load, cfg):
         
     return inequalities
 
-def model_con_max_ramp(gen, cfg):
+def model_con_max_ramp(gen, cfg=config):
     'A constraint to ensure the reactor does not ramp too quickly'
-    cost_ramp = cfg['cost_ramp']
+    # cost_ramp = cfg['cost_ramp']
     max_ramp_rate = cfg['max_ramp_rate']
     inequalities = []
     for i, val in enumerate(gen[:-1]):
@@ -189,7 +189,7 @@ def model_con_max_ramp(gen, cfg):
     return inequalities
 
 
-def obj(gen, time, load, cfg):
+def obj(gen, time, load, cfg=config):
     '''Wrapper to minimize cost only.'''
     return model(gen, time, load, cfg)[0]
 

@@ -59,7 +59,7 @@ def get_data(month, year):
     net_load = data['Load'] - data['Wind'] - data['Solar']
     return time, net_load
 
-def results(xstar, config):
+def results(xstar, config=config):
     '''Generate results from the NHES optimization.'''
 
     time, net_load = get_data(config['month'], config['year'])
@@ -87,7 +87,7 @@ def results(xstar, config):
 
     return {'fstar':fstar, 'T':T, 'T_violations':T_violations, 'ramp_violations':ramp_violations}
 
-def gen_report(out, optimizer, opt_type, config, notes="", filetype='csv', date=None, gen_plot=False, guess=None):
+def gen_report(out, optimizer, opt_type, config=config, notes="", filetype='csv', date=None, gen_plot=False, guess=None):
     '''Save info about a set of optimization results.
     Info for creating LaTex tables from a csv: 
         https://texblog.org/2012/05/30/generate-latex-tables-from-csv-files-excel/

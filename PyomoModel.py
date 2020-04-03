@@ -21,6 +21,9 @@ import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 
+from utils import get_data, config
+from ScipyBaseModel import model, thermal_storage, get_T
+
 #%%
 
 # def J(var):
@@ -80,157 +83,17 @@ import matplotlib.pyplot as plt
 
 # # solve
 # SolverFactory('glpk').solve(model)
-
-
-def get_data(date):
-    file = pd.read_csv("data/ERCOT_load_2019.csv")
-
-    dates = []
-    times = []
-    for hr in file["HourEnding"]:
-        split = hr.split(' ')
-        dates.append(split[0])
-        times.append(split[1])
-
-    file["Date"] = dates
-    file["Time"] = times
-
-    data = file.loc[file["Date"] == date]
-    data = data.reset_index(drop=True)
-
-    return data
-
-def thermal_storage(t, T, x, load, mass_salt, Cp):
-    '''Determines how much heat will be stored/removed 
-    by the salt in the reactor.  Meant to be integrated 
-    using scipy.integrate.odeint.
-    
-    Params:
-    -------
-    t : 1D array
-        time array
-    T : 1D array
-        Difference in temperature
-    x : 1D array
-        Energy generation
-    load : 1D array
-        Energy demand
-    mass_salt : int
-        Amount of salt available to the reactor
-    Cp : int
-        Heat capacity of salt
-        
-    Returns:
-    --------
-    ODE : 1D array
-        Difference between generation and demand
-    '''
-
-    # Energy difference between load and generation is handled by TES
-    return 3.6e9*(x - load)/(mass_salt*Cp)
-
-def model(gen, time, load):
-    '''Determines how much heat will be stored/removed 
-    by the salt in the reactor.  Meant to be integrated 
-    using scipy.integrate.odeint.
-    
-    Params:
-    -------
-    t : 1D array
-        time array
-    T : 1D array
-        Difference in temperature
-    x : 1D array
-        Energy generation
-    load : 1D array
-        Energy demand
-    mass_salt : int
-        Amount of salt available to the reactor
-    Cp : int
-        Heat capacity of salt
-        
-    Returns:
-    --------
-    ODE : 1D array
-        Difference between generation and demand
-    '''
-    mass_salt = 6e8  # kg of salt for thermal energy storage
-    cost_nuclear = 0.021  # $/KWh
-    cost_salt = 10.98    # $/kg
-    T_next = 350  # K
-    Cp = 1530  # J/kg K, heat capacity of the salt
-    T_hist = []
-
-    cost_total = 0#cost_salt*mass_salt
-
-    for i in range(len(time)):
-        # Get next temperature by integrating difference between 
-        # generation and demand
-
-        step = odeint(thermal_storage, T_next, [0, 1],
-                      args=(gen[i], load[i], mass_salt, Cp))
-        T_next = step[1][0]
-
-        T_hist.append(T_next)
-
-    cost_total += np.sum(gen*cost_nuclear)
-
-    return cost_total, T_hist
-
-def gen_cost_constraints(gen, time, load, verbose=False):
-    '''Lets us compute the cost if constraints are violated
-    '''
-
-    mass_salt = 6e8  # kg of salt for thermal energy storage
-    cost_nuclear = 0.021  # $/KWh
-    cost_salt = 10.98    # $/kg
-    cost_blackout = 1e10
-    cost_oversupply = 1e10
-    T_next = 350  # K
-    Cp = 1530  # J/kg K, heat capacity of the salt
-    T_hist = []
-    tes_min_t = 300
-    tes_max_t = 700
-
-    cost_total = 0#cost_salt*mass_salt
-
-    for i in range(len(time)):
-        # Get next temperature by integrating difference between 
-        # generation and demand
-
-        step = odeint(thermal_storage, T_next, [0, 1],
-                      args=(gen[i], load[i], mass_salt, Cp))
-        T_next = step[1][0]
-
-        # Constraints - consider constrained optimization?
-        if T_next < tes_min_t:
-            if verbose:
-                print('Warning: TES too cold.')
-            cost_total += cost_blackout*(tes_min_t-T_next)
-            T_next = tes_min_t
-
-        if T_next > tes_max_t:
-            if verbose:
-                print('Warning: TES too hot.')
-                print(T_next)
-            cost_total += cost_oversupply*(T_next-tes_max_t)
-            T_next = tes_max_t
-
-        T_hist.append(T_next)
-
-    cost_total += np.sum(gen*cost_nuclear)
-
-    return cost_total, T_hist              
+          
 
 def con_max_temp(X):
     
-    T = model(X, time, load)[1]
+    T = get_T(X, time, load, config)
     
     return T
 
 def con_min_temp(X):
 
-    T = model(X, time, load)[1]
+    T = get_T(X, time, load, config)
     return T
 
 def con_max_ramp(X):
@@ -241,33 +104,111 @@ def con_max_ramp(X):
     
     return dEdt
 
+def print_values(thing, length):
+    for i in range(length):
+        print(thing[i].value)
+#%% Parameters
+global time, load
+#    my_date = "2019-10-04"
+#    # day1 = "2019-10-04"
+#    # day2 = "2019-10-05"
+#
+#    # data1 = get_data(day1)
+#    # data2 = get_data(day2)
+#
+#    # data = data1.append(data2, ignore_index=True)
+#    data = get_data(my_date)
+#    
+#    time = data['HourEnding']
+#    load = data['ERCOT']
+
+time, load = get_data(config['month'], config['year'])
+my_date = config['year']+'-'+config['month']+'-'+"01"
+
+nuclear_capacity = config['capacity']
+mass_salt = config['mass_salt']  # kg of salt for thermal energy storage
+#    cost_salt = 10.98    # $/kg
+#    base_cost = mass_salt * cost_salt
+# Optimize generation to minimize cost
+# change gen_factor to change the initial starting point
+#    gen_factor = 0.97
+guess = np.ones(len(time))*config['guess_coef']
+Cp = config['Cp']
+
+TES_max_T = config['tes_max_t']
+TES_min_T = config['tes_min_t']
+max_ramp = config['max_ramp_rate']
+
+cost_ramp = config['cost_ramp']
+
+
+m = ConcreteModel()
+m.t = ContinuousSet(initialize=np.linspace(0, len(time)-1, len(time)))
+
+def genvar(m, i):
+    return guess[int(i)]
+
+m.gen = Var(m.t, initialize=genvar)
+m.cost_nuclear = Param(initialize=config['cost_nuclear'])
+m.mass_salt = Param(initialize=mass_salt)
+m.Cp = Param(initialize=Cp)
+m.cost_ramp = Param(initialize=cost_ramp)
+
+
+def objrule(m):
+    cost_total = summation(m.gen)*m.cost_nuclear
+    for i in range(len(m.gen)-1):
+        cost_total = cost_total + m.cost_ramp*abs(m.gen[i] - m.gen[i+1])
+    
+    return cost_total
+
+m.obj = Objective(rule=objrule)
+
+
+
+#%%
+opt = SolverFactory('ipopt')
+sol = opt.solve(m, tee=True)
+
+
+
+
+
+
+
+
+#%%
+
 def main():
 
     global time, load
-    my_date = "2019-10-04"
-    # day1 = "2019-10-04"
-    # day2 = "2019-10-05"
-
-    # data1 = get_data(day1)
-    # data2 = get_data(day2)
-
-    # data = data1.append(data2, ignore_index=True)
-    data = get_data(my_date)
+#    my_date = "2019-10-04"
+#    # day1 = "2019-10-04"
+#    # day2 = "2019-10-05"
+#
+#    # data1 = get_data(day1)
+#    # data2 = get_data(day2)
+#
+#    # data = data1.append(data2, ignore_index=True)
+#    data = get_data(my_date)
+#    
+#    time = data['HourEnding']
+#    load = data['ERCOT']
     
-    time = data['HourEnding']
-    load = data['ERCOT']
+    time, load = get_data(config['month'], config['year'])
+    my_date = config['year']+'-'+config['month']+'-'+"01"
     
-    nuclear_capacity = 54000
-    mass_salt = 6e8  # kg of salt for thermal energy storage
-    cost_salt = 10.98    # $/kg
-    base_cost = mass_salt * cost_salt
+    nuclear_capacity = config['capacity']
+    mass_salt = config['mass_salt']  # kg of salt for thermal energy storage
+#    cost_salt = 10.98    # $/kg
+#    base_cost = mass_salt * cost_salt
     # Optimize generation to minimize cost
     # change gen_factor to change the initial starting point
-    gen_factor = 0.97
-    guess = np.ones(len(time))*nuclear_capacity*gen_factor
+#    gen_factor = 0.97
+    guess = np.ones(len(time))*config['guess_coef']
     
-    TES_max_T = 700
-    TES_min_T = 300
+    TES_max_T = config['tes_max_t']
+    TES_min_T = config['tes_min_t']
 
 
     m = ConcreteModel()
@@ -330,33 +271,34 @@ def main():
 #def test():
 
 global time, load
-my_date = "2019-10-04"
-# day1 = "2019-10-04"
-# day2 = "2019-10-05"
-
-# data1 = get_data(day1)
-# data2 = get_data(day2)
-
-# data = data1.append(data2, ignore_index=True)
-data = get_data(my_date)
-
-time = np.linspace(0, len(data['HourEnding'])-1, len(data['HourEnding']))
-load = data['ERCOT']
-mass_salt = 6e8  # kg of salt for thermal energy storage
-cost_nuclear = 0.021  # $/KWh
-cost_salt = 10.98    # $/kg
-T_next = 350  # K
-Cp = 1530  # J/kg K, heat capacity of the salt
-T_hist = []
-
-cost_total = 0#cost_salt*mass_salt
-
-TES_max_T = 700
-TES_min_T = 300
-
-nuclear_capacity = 54000
-gen_factor = 0.95
-guess = np.ones(len(time))*nuclear_capacity*gen_factor
+#my_date = "2019-10-04"
+## day1 = "2019-10-04"
+## day2 = "2019-10-05"
+#
+## data1 = get_data(day1)
+## data2 = get_data(day2)
+#
+## data = data1.append(data2, ignore_index=True)
+#data = get_data(my_date)
+#
+#time = np.linspace(0, len(data['HourEnding'])-1, len(data['HourEnding']))
+#
+#load = data['ERCOT']
+#mass_salt = 6e8  # kg of salt for thermal energy storage
+#cost_nuclear = 0.021  # $/KWh
+#cost_salt = 10.98    # $/kg
+#T_next = 350  # K
+#Cp = 1530  # J/kg K, heat capacity of the salt
+#T_hist = []
+#
+#cost_total = 0#cost_salt*mass_salt
+#
+#TES_max_T = 700
+#TES_min_T = 300
+#
+#nuclear_capacity = 54000
+#gen_factor = 0.95
+#guess = np.ones(len(time))*nuclear_capacity*gen_factor
 
 #%% Using odeint
 m = ConcreteModel()
