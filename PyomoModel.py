@@ -85,6 +85,8 @@ from ScipyBaseModel import model, thermal_storage, get_T
 # SolverFactory('glpk').solve(model)
           
 
+#==============================================================================
+# This section is working, but IPOPT is not scaling very well or something
 def con_max_temp(X):
     
     T = get_T(X, time, load, config)
@@ -147,36 +149,156 @@ m.t = ContinuousSet(initialize=np.linspace(0, len(time)-1, len(time)))
 
 def genvar(m, i):
     return guess[int(i)]
+def genb(m, i):
+    return (0, 1e5)
 
-m.gen = Var(m.t, initialize=genvar)
+m.gen = Var(m.t, initialize=genvar, bounds=genb)
+
+def loadparam(m, i):
+    return load[int(i)]
+
+m.Load = Param(m.t, initialize=loadparam)
+
+
 m.cost_nuclear = Param(initialize=config['cost_nuclear'])
 m.mass_salt = Param(initialize=mass_salt)
 m.Cp = Param(initialize=Cp)
 m.cost_ramp = Param(initialize=cost_ramp)
+m.T0 = Param(initialize=350, mutable=True)
+m.T = Param(m.t, initialize=350, mutable=True)
+m.min_T = Param(initialize=TES_min_T)
+m.max_T = Param(initialize=TES_max_T)
+m.blackout = Param(initialize=config['cost_blackout'])
+m.oversupply = Param(initialize=config['cost_oversupply'])
+m.T_last = Param(initialize=350, mutable=True)
+m.T_new = Param(initialize=350, mutable=True)
+#m.scale = Param(initialize=10000)
 
 
 def objrule(m):
+    '''For optimizing with constraints'''
+    
     cost_total = summation(m.gen)*m.cost_nuclear
+    
+    # ramping the reactor
     for i in range(len(m.gen)-1):
         cost_total = cost_total + m.cost_ramp*abs(m.gen[i] - m.gen[i+1])
     
     return cost_total
 
-m.obj = Objective(rule=objrule)
+
+def objpenalty(m):
+    '''For optimizing without constraints'''
+    
+    # base cost
+    cost_total = value(summation(m.gen)*m.cost_nuclear)
+    # ramping the reactor
+    for i in range(len(m.gen)-1):
+        cost_total = cost_total + m.cost_ramp*abs(m.gen[i] - m.gen[i+1])
+        
+    # Temperature penalty
+    T_new = m.T0.value
+    m.T_last = m.T0.value
+    
+    for i in m.t:   
+        m.T[i] = T_new
+        m.T_last = value(T_new)
+        T_new = 3.6e9*(m.gen[i]-m.Load[i])/m.mass_salt/m.Cp + m.T_last
+        
+        if value(T_new) < m.min_T.value:
+#            print(m.min_T.value, value(T_new))
+            cost_total = cost_total + m.blackout*(m.min_T.value - value(T_new))
+#            print(m.min_T - T_new)
+            T_new = m.min_T.value
+            
+        if value(T_new) > m.max_T.value:
+#            print(m.max_T.value, value(T_new))
+            cost_total = cost_total + m.oversupply*(value(T_new) - m.max_T.value)
+#            print(T_new - m.max_T)
+            T_new = m.max_T.value
+            print(T_new)
+            
+    return cost_total
 
 
+def get_T(m):
+    T_new = m.T0
+    
+    for i in m.t:   
+        m.T[i] = T_new
+        m.T_last = value(T_new)
+        T_new = 3.6e9*(m.gen[i]-m.Load[i])/m.mass_salt/m.Cp + m.T_last
+        
+    return m.T
 
+def realgt(gen):
+    T_new = 350
+    T = []
+    for i in range(len(time)):
+        T.append(T_new)
+        T_last = T_new
+        T_new = 3.6e9*(gen[i]-load[i])/mass_salt/Cp + T_last
+        
+    return T
+
+m.obj = Objective(rule=objpenalty)
+#def thermal_rule(m, i):
+#
+#    m.T0 = m.T_next.value
+#    T0 = m.T[i]
+#    
+#    T_new = 3.6e9*(m.Gen[i]-m.load[i])/m.mass_salt/m.Cp + m.T0
+#    
+#    
+#    
+#    
+#    print(T0, T_new)
+#    
+#    
+#    gen_min = (TES_min_T-T0)*mass_salt*Cp/3.6e9 + load[i]
+#    gen_max = (TES_max_T-T0)*mass_salt*Cp/3.6e9 + load[i]
+#    
+#    m.T_next = T_new
+#    if i < len(m.T)-1:
+#        m.T[i+1] = T_new
+#    
+#    print(gen_min)
+#    
+#    return (gen_min, m.Gen[i], gen_max)
+#
+#m.thermal=Constraint(m.t, rule=thermal_rule)
+
+def Gen():
+    return m.gen.extract_values()
+def TT():
+    return m.T.extract_values()
 #%%
-opt = SolverFactory('ipopt')
+opt = SolverFactory('ipopt') # other options apopt.py, glpk
+#opt.options['nlp_scaling_method'] = 'user-scaling' #https://github.com/Pyomo/pyomo/blob/master/examples/pyomo/suffixes/ipopt_scaling.py
+#m.scaling_factor = Suffix(direction=Suffix.EXPORT)
+# objective scaling factor
+#m.scaling_factor[m.obj] = 1e-8
+# variabl scaling factor
+#m.scaling_factor.set_value(m.gen, 1e-5)
 sol = opt.solve(m, tee=True)
 
+#=============================================================================
 
 
 
+#%% Rosenbrock example
+model = ConcreteModel()
+model.x = Var( initialize=-1.2, bounds=(-2, 2) )
+model.y = Var( initialize= 1.0, bounds=(-2, 2) )
+model.obj = Objective(
+expr= (1-model.x)**2 + 100*(model.y-model.x**2)**2,
+sense= minimize )
+
+sol = opt.solve(model, tee=True)
 
 
 
-
+sol
 #%%
 
 def main():

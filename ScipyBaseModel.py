@@ -22,7 +22,8 @@ config = {
     'capacity': 54000,          # MW, Total amount of potential nuclear output
     'year': '2019',             # Year being examined
     'month': '10',              # Month being examined
-    'guess_coef': 54000*0.95    # Initial guess (multiplied by an array of 1s)
+    'guess_coef': 54000*0.95,   # Initial guess (multiplied by an array of 1s)
+    'T0': 350                   # Initial temperature K
 }
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
@@ -86,7 +87,7 @@ def model(gen, time, load, cfg=config):
     cost_nuclear = cfg['cost_nuclear']
     cost_ramp = cfg['cost_ramp']
 
-    T_next = 350  # K
+    T_next = config['T0']#350  # K
     T_hist = []
     cost_total = 0
 
@@ -136,7 +137,7 @@ def get_T(gen, time, load, cfg=config):
     
     mass_salt = cfg['mass_salt']  # kg of salt for thermal energy storage
     Cp = cfg['Cp']  # J/kg K, heat capacity of the salt
-    T_next = 350  # K
+    T_next = config['T0']#350  # K
     
     T_hist = []
     
@@ -155,7 +156,7 @@ def get_T(gen, time, load, cfg=config):
 # Scipy wants constraints like this - other frameworks might let you use bounds
 def model_con_max_T(gen, time, load, cfg=config):
 
-    tes_max_t = 700
+    tes_max_t = cfg['tes_max_t']
     inequalities = []
     
     T_hist = get_T(gen, time, load, cfg)
@@ -168,7 +169,7 @@ def model_con_max_T(gen, time, load, cfg=config):
 
 def model_con_min_T(gen, time, load, cfg=config):
     
-    tes_min_t = 300
+    tes_min_t = cfg['tes_min_t']
     inequalities = []
     
     T_hist = get_T(gen, time, load, cfg)

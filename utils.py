@@ -4,7 +4,8 @@ import pandas as pd
 from os.path import exists
 from sqlalchemy import create_engine
 
-from ScipyBaseModel import model, get_T, model_con_max_ramp
+import ScipyBaseModel as spbm
+# from ScipyBaseModel import model, get_T, model_con_max_ramp
 
 config = {
     'cost_nuclear': 0.021,      # $/KWh
@@ -20,7 +21,8 @@ config = {
     'capacity': 54000,          # MW, Total amount of potential nuclear output
     'year': '2019',             # Year being examined
     'month': '10',              # Month being examined
-    'guess_coef': 54000*0.95    # Initial guess (multiplied by an array of 1s)
+    'guess_coef': 54000*0.95,   # Initial guess (multiplied by an array of 1s)
+    'T0': 350                   # Initial temperature K
 }
 
 
@@ -65,10 +67,10 @@ def results(xstar, config=config):
     time, net_load = get_data(config['month'], config['year'])
 
     # Get optimized cost
-    fstar = model(xstar, time, net_load, config)[0]
+    fstar = spbm.model(xstar, time, net_load, config)[0]
 
     # Get temperature violations
-    T = get_T(xstar, time, net_load, config)
+    T = spbm.get_T(xstar, time, net_load, config)
 
     T_violations = 0
     for temp in T:
@@ -78,12 +80,12 @@ def results(xstar, config=config):
             T_violations += abs(temp-config['tes_min_t'])
 
     # Get ramping violations
-    ramp = model_con_max_ramp(xstar, config)
+    ramp = spbm.model_con_max_ramp(xstar, config)
 
     ramp_violations = 0
     for val in ramp:
         if val < 0:
-            ramp_violations += val
+            ramp_violations += abs(val)
 
     return {'fstar':fstar, 'T':T, 'T_violations':T_violations, 'ramp_violations':ramp_violations}
 
@@ -134,10 +136,11 @@ def gen_report(out, optimizer, opt_type, config=config, notes="", filetype='csv'
         update.to_csv(report_path, index=False)
 
         # print(update.to_string(index=False))
+    print(f"Data saved at: {report_path}")
 
     if gen_plot:
         time, net_load = get_data(config['month'], config['year'])
-        T_hist = get_T(xstar, time, net_load, config)
+        T_hist = spbm.get_T(xstar, time, net_load, config)
         plt.subplot(211)
         plt.plot(time.values, net_load, label='Net Load')
         plt.plot(time.values, xstar, label='Nuclear optimized')
@@ -152,11 +155,12 @@ def gen_report(out, optimizer, opt_type, config=config, notes="", filetype='csv'
         plt.plot(time_limits, [config['tes_max_t'], config['tes_max_t']], '--r')
         plt.plot(time.values, T_hist, label='Optimized TES')
         if guess is not None:
-            T_hist_compare = get_T(guess, time, net_load, config)
+            T_hist_compare = spbm.get_T(guess, time, net_load, config)
             plt.plot(time.values, T_hist_compare, label='TES Initial')
         plt.ylabel('Temperature (K)')
         plt.xlabel('Time')
         plt.legend(loc='upper left')
         plt.gcf().autofmt_xdate()
         plt.savefig(f'saved_plots/{optimizer}-{opt_type}-{date}.png')
+        print(f"Figure saved at: saved_plots/{optimizer}-{opt_type}-{date}.png")
         plt.show()
