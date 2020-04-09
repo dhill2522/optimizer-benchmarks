@@ -1,6 +1,7 @@
 import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from os.path import exists
 from sqlalchemy import create_engine
 
@@ -139,6 +140,7 @@ def gen_report(out, optimizer, opt_type, config=config, notes="", filetype='csv'
     print(f"Data saved at: {report_path}")
 
     if gen_plot:
+        plt.figure()
         time, net_load = get_data(config['month'], config['year'])
         T_hist = spbm.get_T(xstar, time, net_load, config)
         plt.subplot(211)
@@ -164,3 +166,8 @@ def gen_report(out, optimizer, opt_type, config=config, notes="", filetype='csv'
         plt.savefig(f'saved_plots/{optimizer}-{opt_type}-{date}.png')
         print(f"Figure saved at: saved_plots/{optimizer}-{opt_type}-{date}.png")
         plt.show()
+
+def save_iters(x, savepath):
+    all_iters = np.array(x).T
+    df = pd.DataFrame(all_iters)
+    df.to_csv(savepath, index=False)

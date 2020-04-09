@@ -105,7 +105,6 @@ def model(gen, time, load, cfg=config):
 
         if T_next > tes_max_t: # TES upper temp limit
             cost_total += cost_oversupply*(T_next-tes_max_t)
-            T_next = tes_max_t
 
         if i > 0 and abs(gen[i] - gen[i-1]) > cfg['max_ramp_rate']: # ramp rate limit
             cost_total += cfg['cost_overramp'] * (abs(gen[i] - gen[i-1]) - cfg['max_ramp_rate'])
@@ -220,18 +219,38 @@ if __name__ == "__main__":
     ]
 
     opts = {'maxiter': 10000}
+    
+    xhist = []
+    def callback(x):
+        xhist.append(x)
 
     # Penalized Nelder-Mead method
-    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), options=opts)
-    utils.gen_report([sol['x'], sol['nfev']], 'Nelder-Mead', 'Penalized', 
-                        config, gen_plot=True, guess=guess)
+    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), 
+                   options=opts, callback=callback)
+#    utils.gen_report([sol['x'], sol['nfev']], 'Nelder-Mead', 'Penalized', 
+#                        config, gen_plot=True, guess=guess)
+#    utils.save_iters(xhist, "NM_iters.csv")
+#    xhist = []
     
     # Constrained SLSQP Method
-    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config))
-    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Constrained', 
-                        config, gen_plot=True, guess=guess)
+    sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config), 
+                   callback=callback, options=opts)
+   
+#    utils.save_iters(xhist, "SLSQP_iters2.csv")
+#    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Constrained', 
+#                        config, gen_plot=True, guess=guess)
+#    xhist = []
     
     # Penalized SLSQP Method
-    sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), options=opts)
-    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Penalized', 
-                        config, gen_plot=True, guess=guess)
+#    sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), 
+#                   options=opts, callback=callback)
+#    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Penalized', 
+#                        config, gen_plot=True, guess=guess)
+#    utils.save_iters(xhist, "SLSQPpenalty_iters.csv")
+    
+    # trust-constr Method
+#    sol = minimize(obj, guess, method='trust-constr', args=(time, net_load, config), options=opts)
+#    print(sol)
+#    utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Constrained', 
+#                     config, gen_plot=True, guess=guess)
+#%%    

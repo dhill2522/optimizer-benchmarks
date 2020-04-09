@@ -11,10 +11,16 @@ from scipy.integrate import odeint
 from scipy.optimize import differential_evolution, minimize, NonlinearConstraint
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import pandas as pd
 
 from geneticOpt import GA
 from ScipyBaseModel import model, model_obj_only, model_con_max_T, model_con_min_T, model_con_max_ramp, get_T
 from utils import config, get_data, results, gen_report
+
+def save_iters(x, savepath):
+    all_iters = np.array(x).T
+    df = pd.DataFrame(all_iters)
+    df.to_csv(savepath, index=False)
 
 def runCustom(animate=False):
     time, load = get_data(config['month'], config['year'])
@@ -78,7 +84,7 @@ def runCustom(animate=False):
     print(sol)
     print(results(sol[0], config))
     gen_report([xstar,nfev], "Custom GA", "Constrained", config, notes="lb 1e3 ub 8e4", gen_plot=True, guess=guess)
-
+    # save_iters(populations, "GA_iters3.csv")
 
     if animate:
         def update(i):
@@ -207,7 +213,7 @@ def runScipyCon():
     gen_report([xstar, nfev], "Scipy GA", "Constrained", config, notes="lb 1e3 ub 8e4, Scaled, "+opt.message, gen_plot=True)
 
 if __name__ == "__main__":
-    # runCustom()
+    runCustom()
     # runScipy()
-    runScipyCon()
+    # runScipyCon()
     # testStrategies()
