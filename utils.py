@@ -58,7 +58,6 @@ def get_data(month, year):
                                'Date_Time'])['Generation']
 
     time = data['HourEnding']
-    load = data['Load']
     net_load = data['Load'] - data['Wind'] - data['Solar']
     return time, net_load
 
