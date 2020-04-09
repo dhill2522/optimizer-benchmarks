@@ -46,7 +46,7 @@ gen_nuclear.DMAX = config['max_ramp_rate']
 
 ########## Thermal Storage in kg This does not take into account phase change
 # T = m.Var(value=300, lb=260, ub=550)
-T = m.Var(value=300, lb=config['tes_min_t'], ub=config['tes_max_t'])
+T = m.Var(value=350, lb=config['tes_min_t'], ub=config['tes_max_t'])
 
 # cost_nuclear = m.Param(value=.021)  # dollars per KWh
 # cost_salt = m.Param(value=10.98)  # dollars per kg
