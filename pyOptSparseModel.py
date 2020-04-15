@@ -5,7 +5,8 @@ import pyoptsparse
 from scipy.integrate import odeint
 
 import utils
-from ScipyBaseModel import config, model, model_obj_only, get_T
+from default_config import config
+from ScipyBaseModel import model, model_obj_only, get_T
 
 # Makes matplotlib happy plotting pandas data arrays
 # pd.plotting.register_matplotlib_converters()
@@ -60,7 +61,7 @@ def opt_constrained(guess):
     return sol
 
 if __name__ == "__main__":
-    guess = config['capacity']*np.ones(len(time))*0.95
+    guess = config['capacity']*np.ones(len(time))
     sol = opt_penalty(guess)
     utils.gen_report([sol.xStar['xvars'], sol.userObjCalls], 'SNOPT', 
                         'Penalized', config, gen_plot=True, guess=guess)

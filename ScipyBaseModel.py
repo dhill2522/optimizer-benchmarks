@@ -2,29 +2,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import utils
+from default_config import config
 from scipy.optimize import minimize
 from scipy.integrate import odeint
 
 # Makes matplotlib happy plotting pandas data arrays
 pd.plotting.register_matplotlib_converters()
-
-config = {
-    'cost_nuclear': 0.021,      # $/KWh
-    'cost_blackout': 1e10,      # $, cost of not supplying sufficient power, for penalty method
-    'cost_oversupply': 1e10,    # $, cost of supplying too much power, for penalty method
-    'cost_ramp': 1,             # $/MW/hr, Cost of ramping up and down the reactor core
-    'cost_overramp': 1e10,      # $ per MW/hr overage, cost of ramping too quickly
-    'max_ramp_rate': 2000,      # MW/hr, Max rate of ramping the reactor core
-    'Cp': 1530,                 # J/kg K, heat capacity of the salt
-    'tes_min_t': 300,           # K, Minimum temperature of thermal storage unit
-    'tes_max_t': 700,           # K, Maximum temperature of thermal storage unit
-    'mass_salt': 6e8,           # kg, mass of salt for thermal energy storage
-    'capacity': 54000,          # MW, Total amount of potential nuclear output
-    'year': '2019',             # Year being examined
-    'month': '10',              # Month being examined
-    'guess_coef': 54000*0.95,   # Initial guess (multiplied by an array of 1s)
-    'T0': 350                   # Initial temperature K
-}
 
 def thermal_storage(t, T, x, load, mass_salt, Cp):
     '''Determines how much heat will be stored/removed 
@@ -87,7 +70,7 @@ def model(gen, time, load, cfg=config):
     cost_nuclear = cfg['cost_nuclear']
     cost_ramp = cfg['cost_ramp']
 
-    T_next = config['T0']#350  # K
+    T_next = cfg['T0']#350  # K
     T_hist = []
     cost_total = 0
 
@@ -136,7 +119,7 @@ def get_T(gen, time, load, cfg=config):
     
     mass_salt = cfg['mass_salt']  # kg of salt for thermal energy storage
     Cp = cfg['Cp']  # J/kg K, heat capacity of the salt
-    T_next = config['T0']#350  # K
+    T_next = cfg['T0']#350  # K
     
     T_hist = []
     
@@ -225,32 +208,30 @@ if __name__ == "__main__":
         xhist.append(x)
 
     # Penalized Nelder-Mead method
-    sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), 
-                   options=opts, callback=callback)
-#    utils.gen_report([sol['x'], sol['nfev']], 'Nelder-Mead', 'Penalized', 
-#                        config, gen_plot=True, guess=guess)
-#    utils.save_iters(xhist, "NM_iters.csv")
-#    xhist = []
+    # sol = minimize(obj, guess, method='Nelder-Mead', args=(time, net_load, config), 
+    #                options=opts, callback=callback)
+    # utils.gen_report([sol['x'], sol['nfev']], 'Nelder-Mead', 'Penalized', 
+    #                     config, gen_plot=True, guess=guess)
+    # utils.save_iters(xhist, "NM_iters.csv")
+    # xhist = []
     
     # Constrained SLSQP Method
     sol = minimize(model_obj_only, guess, constraints=cons, method='SLSQP', args=(config), 
                    callback=callback, options=opts)
-   
-#    utils.save_iters(xhist, "SLSQP_iters2.csv")
-#    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Constrained', 
-#                        config, gen_plot=True, guess=guess)
+
+    # utils.save_iters(xhist, "SLSQP_iters2.csv")
+    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Constrained', 
+                       config, gen_plot=True, guess=guess)
 #    xhist = []
     
     # Penalized SLSQP Method
-#    sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), 
-#                   options=opts, callback=callback)
-#    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Penalized', 
-#                        config, gen_plot=True, guess=guess)
-#    utils.save_iters(xhist, "SLSQPpenalty_iters.csv")
+    sol = minimize(obj, guess, method='SLSQP', args=(time, net_load, config), 
+                  options=opts, callback=callback)
+    utils.gen_report([sol['x'], sol['nfev']], 'SLSQP', 'Penalized', 
+                       config, gen_plot=True, guess=guess)
+    # utils.save_iters(xhist, "SLSQPpenalty_iters.csv")
     
     # trust-constr Method
-#    sol = minimize(obj, guess, method='trust-constr', args=(time, net_load, config), options=opts)
-#    print(sol)
-#    utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Constrained', 
-#                     config, gen_plot=True, guess=guess)
-#%%    
+    # sol = minimize(obj, guess, method='trust-constr', args=(time, net_load, config), options=opts)
+    # utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Constrained', 
+    #                     config, gen_plot=True, guess=guess)

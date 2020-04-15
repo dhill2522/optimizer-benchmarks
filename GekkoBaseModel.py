@@ -18,7 +18,7 @@ p = np.zeros(n)
 p[-1] = 1
 final = m.Param(value=p)
 
-gen_nuclear = m.MV(value=0.7*config['guess_coef'], lb=0, ub=config['capacity'])
+gen_nuclear = m.MV(value=0.8*config['guess_coef'], lb=0, ub=config['capacity'])
 gen_nuclear.STATUS = 1
 gen_nuclear.DCOST = config['cost_ramp']
 gen_nuclear.DMAX = config['max_ramp_rate']
@@ -31,10 +31,11 @@ m.Equation(T.dt() == 3.6e9*(gen_nuclear - load)/(mass*Cp))
 m.Obj(cost_gen*final)
 
 m.options.IMODE = 6
-m.options.SOLVER = 3 # 1: APOPT, 2: BPOPT, 3: IPOPT
+m.options.DBS_LEVEL = 1
+m.options.SOLVER = 0 # 1: APOPT, 2: BPOPT, 3: IPOPT
 m.solve()
 
 xstar = np.array(gen_nuclear.VALUE.value)
 
 gen_report([xstar, 100], 'Gekko IPOPT', 'Constrained', 
-            config=config, notes='Test, not properly constrained', gen_plot=True)
+            config=config, notes='', gen_plot=True)
