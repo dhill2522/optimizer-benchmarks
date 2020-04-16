@@ -53,4 +53,4 @@ SNOPT,Constrained,19084.013798990018,3969,0.0,0.0,2020-04-09 15:48:56,
 SLSQP,Penalized,9644432857662.69,4794,13959.035452642927,0.0,2020-04-10 11:39:47,
 Scipy GA,Constrained,4013626480708240.0,0,5261.209002330528,396101.4390222228,2020-04-15 11:55:22,"lb 1e3 ub 8e4, Scaled, The solution does not satisfy the constraints, MAXCV = "
 Scipy GA,Constrained,3190121162251233.0,0,909.8289721848489,318832.1967106773,2020-04-15 12:21:38,"lb 1e3 ub 8e4, Scaled, The solution does not satisfy the constraints, MAXCV = "
-Scipy trust-constr,Constrainted,21510.900230997882,347825,0.0,0.0,2020-04-15 12:33:28,
+Scipy trust-constr,Constrained,21510.900230997882,347825,0.0,0.0,2020-04-15 12:33:28,
