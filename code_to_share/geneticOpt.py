@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-'''GA'''
+'''Basic genetic algorithm.
+Nicholas Cooper
+nick.cooper13@gmail.com
+'''
 
 import numpy as np
 from scipy.optimize import minimize

@@ -1,3 +1,5 @@
+"""Parameters for NHES model"""
+
 config = {
     'cost_nuclear': 0.021,      # $/KWh
     # $, cost of not supplying sufficient power, for penalty method

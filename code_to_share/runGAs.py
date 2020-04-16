@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-Testing some GAs
+NHES optimization using genetic algorithms.
 
 Nicholas Cooper
 '''
