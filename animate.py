@@ -6,7 +6,7 @@ import matplotlib.animation as animation
 from utils import config, get_data#, results
 import ScipyBaseModel as spbm
 
-path = "GA_iters3.csv"
+path = "Iteration_History/SLSQPpenalty_iters.csv"
 df = pd.read_csv(path)
 
 def update(i):
@@ -72,6 +72,6 @@ Writer = animation.writers['ffmpeg']
 writer = Writer(fps=10, metadata=dict(artist='Me'), bitrate=1800)
 
 anim = animation.FuncAnimation(fig, update, frames=len(df.keys()), interval = 1/10)
-anim.save('GA.mp4', writer=writer, dpi=100)
+# anim.save('GA.mp4', writer=writer, dpi=100)
 
 plt.show()

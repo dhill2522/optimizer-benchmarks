@@ -231,7 +231,13 @@ if __name__ == "__main__":
                        config, gen_plot=True, guess=guess)
     # utils.save_iters(xhist, "SLSQPpenalty_iters.csv")
     
-    # trust-constr Method
+    # trust-constr Method - takes 15-20 minutes wall time
     # sol = minimize(obj, guess, method='trust-constr', args=(time, net_load, config), options=opts)
-    # utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Constrained', 
-    #                     config, gen_plot=True, guess=guess)
+    # print(sol)
+    # utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Penalized', 
+    #                  config, gen_plot=True, guess=guess)
+    # sol = minimize(model_obj_only, guess, method='trust-constr', args=(config,), 
+    #                options=opts, constraints=cons)
+    # print(sol)
+    # utils.gen_report([sol['x'], sol['nfev']], 'Scipy trust-constr', 'Constrainted', 
+    #                  config, gen_plot=True, guess=guess)  

@@ -178,9 +178,12 @@ def testStrategies():
 
 
 def runScipyCon():
+    global fevals
     time, load = get_data(config['month'], config['year'])
-
+    fevals = 0
     def obj(gen):
+        global fevals
+        fevals += 1
         return model_obj_only(gen)
 
     def tempCon(gen):
@@ -210,10 +213,11 @@ def runScipyCon():
     xstar = opt.x
     nfev = opt.nfev
     print(results(xstar, config))
+    print("fevals:", fevals)
     gen_report([xstar, nfev], "Scipy GA", "Constrained", config, notes="lb 1e3 ub 8e4, Scaled, "+opt.message, gen_plot=True)
 
 if __name__ == "__main__":
-    runCustom()
+    # runCustom()
     # runScipy()
-    # runScipyCon()
+    runScipyCon()
     # testStrategies()
