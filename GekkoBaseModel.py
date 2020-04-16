@@ -1,6 +1,7 @@
 from gekko import GEKKO
 import numpy as np
-from utils import get_data, config, gen_report
+from utils import get_data, gen_report
+from default_config import config
 
 time, net_load = get_data(config['month'], config['year'])
 n = len(time)

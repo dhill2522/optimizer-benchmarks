@@ -21,7 +21,8 @@ import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 
-from utils import get_data, config
+from utils import get_data
+from default_config import config
 from ScipyBaseModel import model, thermal_storage, get_T
 
 #%%

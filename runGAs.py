@@ -15,7 +15,8 @@ import pandas as pd
 
 from geneticOpt import GA
 from ScipyBaseModel import model, model_obj_only, model_con_max_T, model_con_min_T, model_con_max_ramp, get_T
-from utils import config, get_data, results, gen_report
+from utils import get_data, results, gen_report
+from default_config import config
 
 def save_iters(x, savepath):
     all_iters = np.array(x).T

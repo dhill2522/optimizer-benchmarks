@@ -3,7 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from utils import config, get_data#, results
+from utils import get_data#, results
+from default_config import config
 import ScipyBaseModel as spbm
 
 path = "Iteration_History/SLSQPpenalty_iters.csv"
