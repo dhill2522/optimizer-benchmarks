@@ -1,3 +1,5 @@
+"""NHES model optimization"""
+
 from gekko import GEKKO
 import numpy as np
 from utils import get_data, gen_report
