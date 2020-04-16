@@ -1,7 +1,7 @@
 %% Initialize and import data
 clc;clear;
-nuclear_capacity  = 0.7*54000;
-percent_operation = 0.95*0.7;
+nuclear_capacity  = 54000;
+percent_operation = 0.95;
 load('load.mat');
 load('solar.mat');
 load('wind.mat');
